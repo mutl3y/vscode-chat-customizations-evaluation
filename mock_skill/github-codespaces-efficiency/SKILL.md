@@ -63,6 +63,37 @@ From the six candidates below, keep only those supported by audit evidence from 
 - Validate machine sizing against observed usage when telemetry is available; otherwise mark as unverified.
 - Treat unexpected build or startup failures as real bugs even when the configuration looks correct.
 
+## Example Output Structure
+
+### Waste sources
+- **Large base image**: `mcr.microsoft.com/vscode/devcontainers/typescript:1.23` + ~15 npm packages = 2.8 GB (target: <2 GB)
+- **Excessive prebuilds**: Enabled on all 40 branches; only 3 branches have sustained usage
+- **Idle timeout mismatch**: Default 30 min, but 80% of sessions end within 15 min
+
+### Proposed fixes (top 3)
+1. **Trim devcontainer image** (saves ~$180/month, no risk)
+   - Evidence: Image is 2.8 GB; remove unused packages (webpack-cli, python3, Ruby)
+   - Keep: Node, npm, git, Docker, TypeScript — used daily
+   - Target: <2 GB, 8 enabled features
+
+2. **Scope prebuilds** (saves ~$240/month, no risk)
+   - Evidence: 40 branches with prebuilds; only `main`, `develop`, and `release/v*` have >5 Codespaces/week
+   - Change: Enable for default branch + `release/*`; disable for all feature branches
+
+3. **Tune idle timeout to 15 min** (saves ~$90/month, low risk)
+   - Evidence: Telemetry shows 80% of sessions end before 30 min; 15 min better matches usage
+   - Fallback: Document that users can manually extend timeout if needed
+
+### Validation
+- Image trim: ✅ Test Codespace built and started in 45 sec (was 90 sec)
+- Prebuilds: ✅ Verified on develop branch; prebuild reduced spin-up from 120 sec to 30 sec
+- Idle timeout: Unverified (needs user feedback on 15-min setting)
+
+### Impact
+- **Monthly cost**: $450 → $110 (76% reduction)
+- **Startup time**: 90 sec → 35 sec average (includes prebuild hit)
+- **Storage**: 2.8 GB → 1.5 GB per image
+
 ## Required Output
 
 **Waste sources:** [top cost or startup-time drivers]
