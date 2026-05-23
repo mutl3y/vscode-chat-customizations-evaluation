@@ -1039,10 +1039,32 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       await handlePostFixDiagnosticsFlow(skillContext);
+      
+      // Clear cache for this file so the next analysis sees the fixed content
+      clearCacheForUri(targetUri);
+      // Force UI to update button state (from "Fix Diagnostics" back to "Analyze")
+      updateHasDiagnosticsContext();
+      
       logTelemetryUsage('command/fixDiagnostics/result', {
         outcome: 'success',
         diagnosticsCount: diagnostics.length,
       });
+    }),
+    vscode.commands.registerCommand('chatCustomizationsEvaluations.clearCacheAndRescan', async () => {
+      logTelemetryUsage('command/clearCacheAndRescan');
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        logTelemetryUsage('command/clearCacheAndRescan/result', { outcome: 'noActiveEditor' });
+        void vscode.window.showInformationMessage('No active editor.');
+        return;
+      }
+      
+      clearCacheForUri(editor.document.uri);
+      void vscode.window.showInformationMessage('Cache cleared. Re-analyzing...');
+      logTelemetryUsage('command/clearCacheAndRescan/result', { outcome: 'cacheCleared' });
+      
+      // Trigger analysis on the active file
+      await vscode.commands.executeCommand('chatCustomizationsEvaluations.analyzePrompt');
     }),
     vscode.commands.registerCommand('chatCustomizationsEvaluations.analyzePromptFromCustomization', async (obj) => {
       logTelemetryUsage('command/analyzePromptFromCustomization');
@@ -1152,6 +1174,17 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   console.log('Chat Customizations Evaluations extension activated');
+}
+
+function clearCacheForUri(uri: vscode.Uri): void {
+  const uriStr = uri.toString();
+  analysisSnapshotsByUri.delete(uriStr);
+  outputChannel.appendLine(`[Cache] Cleared analysis snapshot for ${uri.fsPath}`);
+}
+
+function clearAllCaches(): void {
+  analysisSnapshotsByUri.clear();
+  outputChannel.appendLine('[Cache] Cleared all analysis snapshots');
 }
 
 function updateHasDiagnosticsContext(): void {

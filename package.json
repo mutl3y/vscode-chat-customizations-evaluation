@@ -119,6 +119,11 @@
         "category": "Chat Customizations Evaluations"
       },
       {
+        "command": "chatCustomizationsEvaluations.clearCacheAndRescan",
+        "title": "Clear Cache and Rescan",
+        "category": "Chat Customizations Evaluations"
+      },
+      {
         "command": "chatCustomizationsEvaluations.analyzePromptFromCustomization",
         "title": "Analyze",
         "category": "Chat Customizations Evaluations",
@@ -167,6 +172,11 @@
           "when": "chatCustomizationsEvaluations.hasDiagnostics && (editorLangId == prompt || editorLangId == chatagent || editorLangId == skill || editorLangId == instructions || resourceFilename == AGENTS.md)"
         },
         {
+          "command": "chatCustomizationsEvaluations.clearCacheAndRescan",
+          "group": "inline",
+          "when": "editorLangId == prompt || editorLangId == chatagent || editorLangId == skill || editorLangId == instructions || resourceFilename == AGENTS.md"
+        },
+        {
           "command": "chatCustomizationsEvaluations.wazaRunEvalFromFile",
           "group": "inline",
           "when": "resourceFilename == eval.yaml"
@@ -208,6 +218,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.1",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.2",
