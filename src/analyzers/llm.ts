@@ -569,6 +569,14 @@ IMPORTANT:
 - If custom diagnostics are configured, include "custom_diagnostics" in the response (use [] when no custom issues are found).
 - Do NOT analyze the frontmatter`;
 
+    // DEBUG: Log the full prompt being sent to LLM
+    this.debugLog('LLM Analysis Prompt', {
+      promptLength: prompt.length,
+      documentLength: doc.getText().length,
+      documentUri: doc.uri.toString(),
+      promptContent: prompt,
+    });
+
     const response = await this.callLLM(prompt);
     const results: AnalysisResult[] = [];
     try {
