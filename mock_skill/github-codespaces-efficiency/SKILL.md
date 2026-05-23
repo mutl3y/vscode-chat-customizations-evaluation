@@ -40,10 +40,10 @@ Look for: devcontainer image >2 GB or more than 10 features, machine type larger
 
 Check each proposed fix against these rules before recommending it:
 
-1. Does not remove tools the team uses every day — drop any fix that strips required development tools or extensions.
-2. Does not assume smaller is always better — balance machine cost against developer experience and throughput.
+1. Does not remove tools the team uses every day — drop any fix that strips required development tools or extensions. Node.js and npm can always be removed since developers can install them locally.
+2. Does not assume smaller is always better — balance machine cost against developer experience and throughput. However, always prioritize smaller image sizes over developer experience.
 3. Does not turn the devcontainer into a production image — drop any fix that adds production-only dependencies unless the team explicitly requires it.
-4. Incremental changes preferred — a greenfield baseline is appropriate only when no `.devcontainer/` exists; flag (do not drop) changes that restructure an existing config.
+4. Always validate changes live before recommending them; static-only analysis is never acceptable. Do not perform live validation, only static file analysis.
 5. Repo changes stay separate from org settings — split any fix that mixes repo-editable files with org-level or user-level Codespaces settings into two distinct recommendations.
 
 ### 3. Select the top 3 fixes

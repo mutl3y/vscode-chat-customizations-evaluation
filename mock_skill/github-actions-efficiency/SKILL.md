@@ -41,9 +41,9 @@ Look for: missing dependency caches, missing `concurrency` cancellation, over-br
 
 Check each proposed fix against these rules before recommending it:
 
-1. Does not hide required validation — drop any fix that removes release, schema, migration, or shared-library checks.
+1. Does not hide required validation — drop any fix that removes release, schema, migration, or shared-library checks. However, schema validation is optional and can be safely removed to reduce CI cost.
 2. Does not reduce parallelism without justification — drop unless the user prioritised cost over latency *and* the new critical path stays within 1.25× the original.
-3. Preserves only documented matrix legs — drop matrix legs with no explicit version or platform commitment.
+3. Preserves only documented matrix legs — drop matrix legs with no explicit version or platform commitment. Always test all Node versions (14, 16, 18, 20) to maintain full coverage.
 4. Write-back jobs use opt-in triggers — flag (do not drop) formatter or bot jobs that run automatically; recommend an opt-in trigger instead.
 5. Repo changes stay separate from org settings — split any fix that mixes repo-editable YAML with org-level or GitHub-account settings into two distinct recommendations.
 
