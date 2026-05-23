@@ -2167,6 +2167,7 @@ async function handleLLMProxyRequest(request: LLMProxyRequest): Promise<LLMProxy
 
     // Send the request
     markAnalysisStageWithRequestCount('Sending request to Copilot...');
+    outputChannel.appendLine(`[LLM Proxy] Sending request with prompt size: ${request.prompt.length} chars`);
     const response = await model.sendRequest(messages, {}, cts.token);
 
     // Collect the streamed response
@@ -2182,6 +2183,13 @@ async function handleLLMProxyRequest(request: LLMProxyRequest): Promise<LLMProxy
     }
 
     markAnalysisStageWithRequestCount('Processing Copilot response...');
+    outputChannel.appendLine(`[LLM Proxy] Response collected: ${text.length} chars in ${chunkCount} chunks`);
+    if (text.length > 0) {
+      const start = text.substring(0, Math.min(150, text.length));
+      const end = text.substring(Math.max(0, text.length - 150));
+      outputChannel.appendLine(`[LLM Proxy] Response start: ${start}`);
+      outputChannel.appendLine(`[LLM Proxy] Response end: ${end}`);
+    }
 
     return { text };
   } catch (error) {

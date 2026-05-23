@@ -10,6 +10,8 @@ import {
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { LLMAnalyzer } from './analyzers/llm';
 import {
@@ -23,9 +25,17 @@ const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 const staleNotificationEligibleUris = new Set<string>();
 
+// Setup debug logging
 const llmAnalyzer = new LLMAnalyzer();
 
-connection.onInitialize((_params: InitializeParams) => {
+// Auto-setup debug log if in workspace
+connection.onInitialize((params: InitializeParams) => {
+  // Setup debug log in workspace root directory
+  if (!process.env.DEBUG_LOG && params.rootPath) {
+    const debugLogPath = path.join(params.rootPath, '.debug-llm-analyzer.log');
+    process.env.DEBUG_LOG = debugLogPath;
+  }
+
   const result: InitializeResult = {
     capabilities: {
       textDocumentSync: {
@@ -35,7 +45,7 @@ connection.onInitialize((_params: InitializeParams) => {
     },
   };
 
-  if (_params.capabilities.workspace?.workspaceFolders) {
+  if (params.capabilities.workspace?.workspaceFolders) {
     result.capabilities.workspace = {
       workspaceFolders: { supported: true },
     };
