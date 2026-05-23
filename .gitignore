@@ -44,3 +44,5 @@ coverage/
 *.tmp
 *.temp
 .cache/
+mock_skill/.debug-llm-analyzer-prompt.txt
+/tmp/vscode-analyzer*.txt
