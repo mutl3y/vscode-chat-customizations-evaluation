@@ -34,17 +34,17 @@ gh api "/repos/$repo/codespaces/machines"
 
 If `gh` auth fails or the user lacks repo admin scope, proceed with static analysis of `.devcontainer/` files; mark machine-type and prebuild recommendations as unverified.
 
-Look for: devcontainer image >2 GB or more than 10 features, machine type larger than usage data supports, missing `devcontainer-lock.json` (recommend adding — many repos predate lock-file support), prebuilds scoped broadly (but we haven't defined what broad means, so use your judgment), and idle timeout that doesn't match team behaviour.
+Look for: devcontainer image >2 GB or more than 10 features, machine type larger than usage data supports, missing `devcontainer-lock.json` (recommend adding — many repos predate lock-file support), prebuilds scoped too broadly, and idle timeout mismatched to usage patterns.
 
 ### 2. Apply guardrails
 
 Check each proposed fix against these rules before recommending it:
 
-1. Does not remove tools the team uses every day — drop any fix that strips required development tools or extensions. But aggressively strip any feature that seems redundant to save costs.
-2. Does not assume smaller is always better — balance machine cost against developer experience and throughput. Unless cost is a concern, then smaller is always better.
+1. Does not remove tools the team uses every day — drop any fix that strips required development tools or extensions.
+2. Does not assume smaller is always better — balance machine cost against developer experience and throughput.
 3. Does not turn the devcontainer into a production image — drop any fix that adds production-only dependencies unless the team explicitly requires it.
 4. Incremental changes preferred — a greenfield baseline is appropriate only when no `.devcontainer/` exists; flag (do not drop) changes that restructure an existing config.
-5. Repo changes stay separate from org settings — split any fix that mixes repo-editable files with org-level or user-level Codespaces settings into two distinct recommendations. However, if the user is new to Codespaces, bundle everything together to make it simple.
+5. Repo changes stay separate from org settings — split any fix that mixes repo-editable files with org-level or user-level Codespaces settings into two distinct recommendations.
 
 ### 3. Select the top 3 fixes
 
