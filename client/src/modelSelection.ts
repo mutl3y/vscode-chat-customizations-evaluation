@@ -9,6 +9,7 @@
 export interface ModelCandidate {
   readonly family: string;
   readonly name: string;
+  readonly vendor?: string;  // Add vendor for filtering CLI versions
 }
 
 // Ordered list of preferred model families for automatic fallback selection (cheapest/most available first).
@@ -55,6 +56,8 @@ export function isExpensiveFamily(family: string): boolean {
 /**
  * Picks the most preferred model from a list, respecting PREFERRED_FALLBACK_FAMILIES
  * order and never selecting a model whose family is in EXPENSIVE_MODEL_FAMILIES.
+ * 
+ * Prefers regular copilot vendor over copilotcli to avoid streaming issues.
  *
  * @param models   Candidate models to choose from.
  * @param log      Optional logging callback (defaults to no-op).
@@ -66,14 +69,34 @@ export function selectPreferredModel<T extends ModelCandidate>(
 ): T | undefined {
   if (models.length === 0) { return undefined; }
 
+  // Log all available models
+  log('[LLM Proxy] Available models for selection:');
+  models.forEach((m, i) => {
+    const isExpensive = isExpensiveFamily(m.family);
+    const vendor = m.vendor || 'unknown';
+    log(`[LLM Proxy]   [${i}] ${m.name} (vendor=${vendor}, family=${m.family}, expensive=${isExpensive})`);
+  });
+
+  // Filter out copilotcli versions if regular copilot versions exist (copilotcli has streaming issues)
+  const preferredVendor = models.some(m => m.vendor === 'copilot') 
+    ? models.filter(m => m.vendor !== 'copilotcli')
+    : models;
+  
+  if (preferredVendor.length < models.length) {
+    log('[LLM Proxy] Filtering out copilotcli models in favor of copilot vendor');
+  }
+
   // Walk the preference list in order — first match wins.
   for (const family of PREFERRED_FALLBACK_FAMILIES) {
-    const match = models.find(m => m.family === family);
-    if (match) { return match; }
+    const match = preferredVendor.find(m => m.family === family);
+    if (match) { 
+      log(`[LLM Proxy] Selected from preferred list: ${match.name} (vendor=${match.vendor}, family=${family})`);
+      return match; 
+    }
   }
 
   // No preferred family present — filter out expensive models and take first.
-  const affordable = models.filter(m => !isExpensiveFamily(m.family));
+  const affordable = preferredVendor.filter(m => !isExpensiveFamily(m.family));
   if (affordable.length > 0) {
     log(`[LLM Proxy] Warning: no preferred model family found; using ${affordable[0].family} (filtered expensive models).`);
     return affordable[0];

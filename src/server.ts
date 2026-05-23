@@ -10,7 +10,6 @@ import {
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import * as fs from 'fs';
 import * as path from 'path';
 
 import { LLMAnalyzer } from './analyzers/llm';
@@ -31,9 +30,11 @@ const llmAnalyzer = new LLMAnalyzer();
 // Auto-setup debug log if in workspace
 connection.onInitialize((params: InitializeParams) => {
   // Setup debug log in workspace root directory
-  if (!process.env.DEBUG_LOG && params.rootPath) {
+  if (params.rootPath) {
     const debugLogPath = path.join(params.rootPath, '.debug-llm-analyzer.log');
     process.env.DEBUG_LOG = debugLogPath;
+    llmAnalyzer.setDebugLogPath(debugLogPath);
+    connection.console.log(`Debug logging enabled at: ${debugLogPath}`);
   }
 
   const result: InitializeResult = {

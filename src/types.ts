@@ -78,6 +78,55 @@ export interface LLMCoverageResponse {
   };
 }
 
+// Analysis history tracking for loop detection
+export interface RecommendationRecord {
+  /** Timestamp when recommendation was made */
+  timestamp: number;
+  /** Code/category of the issue (e.g., 'contradiction', 'ambiguity') */
+  issueCode: string;
+  /** Exact text from the prompt where issue was found */
+  relevantText: string;
+  /** Unique hash of the issue (to detect re-reports of same issue) */
+  issueHash: string;
+  /** Severity level */
+  severity: 'error' | 'warning' | 'info' | 'hint';
+  /** The suggestion made to fix this issue */
+  suggestion: string;
+}
+
+export interface AnalysisHistory {
+  /** Document URI */
+  uri: string;
+  /** Previous recommendations for this document */
+  recommendations: RecommendationRecord[];
+  /** Last analysis fingerprint (SHA256 of content) */
+  lastFingerprint: string;
+  /** Skill frontmatter metadata (if available) */
+  skillMetadata?: SkillMetadata;
+}
+
+export interface SkillMetadata {
+  /** Skill name from frontmatter */
+  name?: string;
+  /** Skill description from frontmatter */
+  description?: string;
+  /** Extracted use case keywords to validate findings scope */
+  useCaseKeywords: string[];
+  /** Whether this is a skill (vs regular prompt) */
+  isSkill: boolean;
+}
+
+export interface LoopDetectionResult {
+  /** True if a potential feedback loop was detected */
+  isLoop: boolean;
+  /** Which recommendation(s) from history are being re-reported */
+  reportsInHistory: RecommendationRecord[];
+  /** Confidence level of loop detection */
+  confidence: 'high' | 'medium' | 'low';
+  /** Human-readable explanation */
+  explanation: string;
+}
+
 /** Combined LLM response for single-call analysis. */
 export interface LLMCombinedAnalysisResponse {
   contradictions?: LLMContradictionResponse['contradictions'];

@@ -78,6 +78,12 @@
         "title": "Analyze Prompt",
         "category": "Chat Customizations Evaluations",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "chatCustomizationsEvaluations.clearCacheAndRescan",
+        "title": "Clear Cache and Re-analyze",
+        "category": "Chat Customizations Evaluations",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
