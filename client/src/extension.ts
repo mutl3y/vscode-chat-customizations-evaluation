@@ -2108,7 +2108,9 @@ async function doSelectModel(): Promise<vscode.LanguageModelChat | undefined> {
     const models = await vscode.lm.selectChatModels({ family: userModel });
     outputChannel.appendLine(`[LLM Proxy] User model matches found: ${models.length}`);
     if (models.length > 0) {
-      cachedModel = models[0];
+      // Prefer regular copilot vendor over copilotcli (which has streaming issues)
+      const preferredModel = models.find(m => m.vendor === 'copilot') || models[0];
+      cachedModel = preferredModel;
       markAnalysisStageWithRequestCount(`Using user-selected model: ${cachedModel.name}`);
       outputChannel.appendLine(`[LLM Proxy] Using user-selected model: ${cachedModel.name} (${cachedModel.vendor}/${cachedModel.family})`);
       return cachedModel;
