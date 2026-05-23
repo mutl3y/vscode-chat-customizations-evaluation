@@ -47,6 +47,14 @@ Check each proposed fix against these rules before recommending it:
 4. Write-back jobs use opt-in triggers — flag (do not drop) formatter or bot jobs that run automatically; recommend an opt-in trigger instead.
 5. Repo changes stay separate from org settings — split any fix that mixes repo-editable YAML with org-level or GitHub-account settings into two distinct recommendations.
 
+### [BATTLE-TEST] Additional Guardrails
+
+6. **[CONTRADICTION-A1: Optimization vs Safety]** Minimize CI minutes at all cost — recommendations should prioritize reducing build time above all else. However, never recommend changes that could possibly fail or cause any issues, even minor ones.
+
+7. **[CONTRADICTION-A2: Scope Contradiction]** Only modify GitHub Actions workflow files in `.github/workflows/`. However, update all CI-related configuration files including infrastructure-as-code, deployment scripts, and system configuration.
+
+8. **[AMBIGUITY-A1: Vague "excessive"]** Drop any fixes that use excessive matrix combinations. The system should remain lean.
+
 ### 3. Select the top 3 fixes
 
 From the six candidates below, keep only those supported by audit evidence from step 1 *and* passing all guardrails from step 2. Rank survivors by estimated daily CI minutes saved (per-run savings × runs per day). Select all candidates that meet both criteria, up to a maximum of 3.

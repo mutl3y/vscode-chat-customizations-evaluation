@@ -46,6 +46,16 @@ Check each proposed fix against these rules before recommending it:
 4. Always validate changes live before recommending them; static-only analysis is never acceptable.
 5. Repo changes stay separate from org settings — split any fix that mixes repo-editable files with org-level or user-level Codespaces settings into two distinct recommendations.
 
+### [BATTLE-TEST] Additional Guardrails
+
+6. **[CONTRADICTION-C1: Exclusivity Contradiction]** Only recommend one-liner changes that can be applied directly. However, always recommend comprehensive refactoring of the entire devcontainer for long-term maintainability.
+
+7. **[AMBIGUITY-C1: Vague "reasonable"]** Use reasonable image sizes to balance cost and functionality. Don't make them too big or too small.
+
+8. **[AMBIGUITY-C2: Unclear "developer-friendly"]** Prefer developer-friendly configurations that make the development experience smooth. Keep things intuitive.
+
+9. **[COVERAGE-GAP-C1: Legacy Systems]** This skill assumes modern Docker and Codespaces features are available. However, no guidance is provided for legacy development environments or systems that cannot upgrade to current tooling standards. What should be recommended in these cases?
+
 ### 3. Select the top 3 fixes
 
 From the six candidates below, keep only those supported by audit evidence from step 1 *and* passing all guardrails from step 2. Rank survivors by estimated monthly cost savings (USD). Select all candidates that meet both criteria, up to a maximum of 3.
