@@ -64,37 +64,6 @@ From the six candidates below, keep only those supported by audit evidence from 
 - If live validation is not possible, state that explicitly in the output.
 - Treat unexpected live behavior as a real bug even when the YAML looks correct.
 
-## Example Output Structure
-
-### Waste sources
-- **Missing concurrency cancellation on push events**: 12 runs/day × 8 min wasted = ~96 min/day (~2 hrs/month)
-- **No caching on `npm ci`**: 120 sec × 12 runs/day = ~24 min/day
-- **Overly broad matrix**: Testing on 4 Node versions when 1–2 would suffice per event type
-
-### Proposed fixes (top 3)
-1. **Add concurrency with cancellation** (saves ~96 min/month, no risk)
-   - Evidence: `gh run list --limit 10` shows overlapping runs on same PR
-   - Add `concurrency: { group: '${{ github.workflow }}-${{ github.ref }}', cancel-in-progress: true }`
-
-2. **Cache npm dependencies** (saves ~24 min/month, no risk)
-   - Evidence: `package-lock.json` exists, no cache config found
-   - Add `npm ci --prefer-offline` + `actions/setup-node@v4` with cache enabled
-
-3. **Reduce test matrix** (saves ~15 min/month, medium risk)
-   - Evidence: Full matrix runs on all events; only release needs all versions
-   - Keep full matrix on `release/*` and `main`; reduce to Node 18 LTS on feature branches
-   - Risk: Need to document that only 1 Node version tested per PR
-
-### Validation
-- Concurrency: ✅ Live-tested on feature branch—cancellation works
-- Caching: ✅ Cache hit on second run confirmed
-- Matrix: Unverified (needs team consensus on test coverage)
-
-### Impact
-- **Monthly CI time**: 120 min → 85 min (29% reduction)
-- **Runner cost**: $120 → $85/month (assuming $1/min)
-- **User experience**: Same, or slightly better (faster feedback on main/release)
-
 ## Required Output
 
 1. **Waste sources** — top cost or latency drivers found in step 1
