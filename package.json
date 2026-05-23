@@ -23,6 +23,8 @@
     "analyze:file": "npm run build && node cli-analyzer.js",
     "analyze:batch": "npm run build && node cli-analyzer.js --batch",
     "analyze:battle": "npm run build && node cli-analyzer.js --battle-test",
+    "test:compare": "npm run build && node test-comparison.js",
+    "test:compare:report": "npm run build && node test-comparison.js --report",
     "lint": "eslint src && cd client && npx eslint src",
     "clean": "rm -rf out && cd client && rm -rf out",
     "package": "npm run bundle && vsce package --no-dependencies",
