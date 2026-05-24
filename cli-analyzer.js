@@ -544,7 +544,8 @@ function generateDashboardHTML(baseline, previous, latest) {
     const rowCls = isRegressed ? ' class="regressed"' : '';
     const prevBarCell = p ? `<td class="bars">${prevBar}</td>` : '';
     const dVsPrevCell = p ? `<td class="num">${dVsPrev}</td>` : '';
-    return `<tr${rowCls}><td class="name">${lf.name}</td><td class="num">${lf.expected}</td><td class="bars">${baseBar}</td>${prevBarCell}<td class="bars">${currBar}</td><td class="num">${lf.detected}/${lf.expected}</td>${dVsPrevCell}<td class="num">${dVsBase}</td></tr>`;
+    const fpStr = (lf.falsePositives || 0) > 0 ? ` <span class="fp">+${lf.falsePositives}FP</span>` : '';
+    return `<tr${rowCls}><td class="name">${lf.name}</td><td class="num">${lf.expected}</td><td class="bars">${baseBar}</td>${prevBarCell}<td class="bars">${currBar}</td><td class="num">${lf.truePositives ?? lf.detected}/${lf.expected}${fpStr}</td>${dVsPrevCell}<td class="num">${dVsBase}</td></tr>`;
   }).join('');
   const fileHeaderPrev = p ? '<th>Prev</th><th style="text-align:right">Δ prev</th>' : '';
 
@@ -557,7 +558,7 @@ function generateDashboardHTML(baseline, previous, latest) {
   const impVsBase = l.overallRate - b.overallRate;
   const impVsPrev = p ? (l.overallRate - p.overallRate) : null;
   const prevCard = p
-    ? `<div class="card neutral"><div class="lbl">Previous run</div><div class="val">${p.overallRate}%</div><div class="sub">${p.totalDetected} / ${p.totalExpected} &nbsp;·&nbsp; ${p.timestamp.substring(0,10)}</div></div>`
+    ? `<div class="card neutral"><div class="lbl">Previous Jaccard</div><div class="val">${p.overallRate}%</div><div class="sub">TP: ${p.totalTruePositives}  FP: ${p.totalFalsePositives} &nbsp;·&nbsp; ${p.timestamp.substring(0,10)}</div></div>`
     : '';
   const regressionCardCls = impVsPrev != null ? (impVsPrev < -REGRESSION_TOLERANCE_PCT ? 'neg' : impVsPrev > 0 ? 'pos' : 'neutral') : 'neutral';
   const regressionCard = p
@@ -603,18 +604,20 @@ tr.regressed td:first-child::after { content: ' ⚠️'; }
 .delta.zero { color: #94a3b8; }
 .detail { color: #64748b; font-size: 12px; max-width: 380px; }
 .muted { color: #475569; }
+.fp { color: #f97316; font-size: 11px; font-weight: 600; }
+.metric-sub { color: #94a3b8; font-size: 11px; margin-top: 2px; }
 code { background: #21262d; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 </style></head><body>
 <h1>⚔️ Analyzer Battle Test Dashboard</h1>
 ${headerNote}
 ${regressionBanner}
 <div class="cards">
-  <div class="card neutral"><div class="lbl">Baseline</div><div class="val">${b.overallRate}%</div><div class="sub">${b.totalDetected}/${b.totalExpected} &nbsp;·&nbsp; ${b.timestamp.substring(0,10)}</div></div>
+  <div class="card neutral"><div class="lbl">Baseline Jaccard</div><div class="val">${b.overallRate}%</div><div class="sub">TP: ${b.totalTruePositives}  FP: ${b.totalFalsePositives} &nbsp;·&nbsp; ${b.timestamp.substring(0,10)}</div></div>
   ${prevCard}
-  <div class="card ${l.overallRate >= b.overallRate ? 'pos' : 'neg'}"><div class="lbl">Current</div><div class="val">${l.overallRate}%</div><div class="sub">${l.totalDetected}/${l.totalExpected} &nbsp;·&nbsp; ${l.timestamp.substring(0,10)}</div></div>
+  <div class="card ${l.overallRate >= b.overallRate ? 'pos' : 'neg'}"><div class="lbl">Current Jaccard</div><div class="val">${l.overallRate}%</div><div class="sub">TP: ${l.totalTruePositives}  FP: ${l.totalFalsePositives} &nbsp;·&nbsp; ${l.timestamp.substring(0,10)}</div></div>
   ${regressionCard}
 </div>
-<p class="ceiling">Tool ceiling ≈ 65% (59/91). ~32 issues need enhancement roadmap items. Regression tolerance: ±${REGRESSION_TOLERANCE_PCT}%.</p>
+<p class="ceiling">Scores are Jaccard / IoU: TP÷(TP+FP+FN). Equals recall when FP=0; penalises false positives directly. Regression tolerance: ±${REGRESSION_TOLERANCE_PCT}%.</p>
 
 <h2>Per-File Detection</h2>
 <table><tr><th>Skill file</th><th style="text-align:right">Injected</th><th>Baseline</th>${fileHeaderPrev}<th>Current</th><th style="text-align:right">Detected</th><th style="text-align:right">Δ base</th></tr>${fileRows}</table>
@@ -712,7 +715,10 @@ async function runBattleTest({ integration = false, dashboard = false } = {}) {
   }
 
   let totalExpected = 0;
-  let totalDetected = 0;
+  let totalDetected = 0;  // raw count (for display)
+  let totalTruePositives = 0;
+  let totalFalsePositives = 0;
+  let totalFalseNegatives = 0;
   const results = [];
 
   for (const test of testFiles) {
@@ -729,7 +735,17 @@ async function runBattleTest({ integration = false, dashboard = false } = {}) {
     try {
       const analysisResults = await analyzeFile(test.path, { silent: true });
       const detected = analysisResults.length;
-      const rate = Math.round((detected / test.expected) * 100);
+
+      // Jaccard (IoU) scoring: TP = issues correctly found (capped at expected)
+      // FP = extra detections beyond expected (noise / false alarms)
+      // FN = expected issues the analyzer missed
+      // Jaccard = TP / (TP + FP + FN) — equals recall when FP=0, penalises noise
+      const truePositives  = Math.min(detected, test.expected);
+      const falsePositives = Math.max(0, detected - test.expected);
+      const falseNegatives = Math.max(0, test.expected - detected);
+      const jaccard = (truePositives + falsePositives + falseNegatives) > 0
+        ? truePositives / (truePositives + falsePositives + falseNegatives) : 0;
+      const rate      = Math.round(jaccard * 100);  // primary score: Jaccard (0-100)
 
       // Collect per-category breakdown for dashboard
       const byCategory = {};
@@ -737,20 +753,27 @@ async function runBattleTest({ integration = false, dashboard = false } = {}) {
         const cat = classifyCode(d.code || '');
         byCategory[cat] = (byCategory[cat] || 0) + 1;
       });
-      
-      const statusColor = rate >= 75 ? 'green' : rate >= 50 ? 'yellow' : 'red';
-      const status = rate >= 75 ? '✅' : rate >= 50 ? '⚠️' : '❌';
-      
-      log(`   Detected: ${detected}/${test.expected} (${rate}%) ${status}`, statusColor);
 
-      totalExpected += test.expected;
-      totalDetected += detected;
-      
+      const statusColor = rate >= 65 ? 'green' : rate >= 40 ? 'yellow' : 'red';
+      const status = rate >= 65 ? '✅' : rate >= 40 ? '⚠️' : '❌';
+      const fpNote = falsePositives > 0 ? `  ⚠️ +${falsePositives} FP` : '';
+
+      log(`   TP: ${truePositives}/${test.expected}  FP: ${falsePositives}  FN: ${falseNegatives}  |  Jaccard: ${rate}% ${status}${fpNote}`, statusColor);
+
+      totalExpected       += test.expected;
+      totalDetected       += detected;
+      totalTruePositives  += truePositives;
+      totalFalsePositives += falsePositives;
+      totalFalseNegatives += falseNegatives;
+
       results.push({
         name: test.name,
         expected: test.expected,
         detected,
-        rate,
+        truePositives,
+        falsePositives,
+        falseNegatives,
+        rate,  // = Jaccard score (0-100); used by regression detection and dashboard bars
         category: test.category || '',
         byCategory,
       });
@@ -769,16 +792,17 @@ ${results.map(r => `| ${r.name} | ${r.expected} | ${r.detected} | ${r.rate}% | $
   
   log(table);
 
-  const overallRate = Math.round((totalDetected / totalExpected) * 100);
-  // Thresholds reflect that ~32/91 injected issues require new analyzer categories
-  // (context waste, weak directives, dead instructions) not yet implemented.
-  // Maximum theoretical detection with current tool: ~65%.
-  const statusColor = overallRate >= 55 ? 'green' : overallRate >= 40 ? 'yellow' : 'red';
-  const status = overallRate >= 55 ? '✅ GOOD — at or above expected baseline' : overallRate >= 40 ? '⚠️ PARTIAL — some categories underperforming' : '❌ NEEDS WORK — below expected baseline';
+  // Overall Jaccard across all categories: TP / (TP + FP + FN)
+  const overallJaccard = (totalTruePositives + totalFalsePositives + totalFalseNegatives) > 0
+    ? totalTruePositives / (totalTruePositives + totalFalsePositives + totalFalseNegatives) : 0;
+  const overallRate = Math.round(overallJaccard * 100);
+
+  const statusColor = overallRate >= 60 ? 'green' : overallRate >= 40 ? 'yellow' : 'red';
+  const status = overallRate >= 60 ? '✅ GOOD' : overallRate >= 40 ? '⚠️ PARTIAL — some categories underperforming' : '❌ NEEDS WORK';
 
   log('-'.repeat(70), 'gray');
-  log(`TOTAL: ${totalDetected}/${totalExpected} injected issues detected (${overallRate}%) ${status}`, statusColor);
-  log('(~32 of 91 issues require new analyzer categories — see /memories/repo/analyzer-enhancement-roadmap.md)', 'gray');
+  log(`TOTAL: TP ${totalTruePositives}  FP ${totalFalsePositives}  FN ${totalFalseNegatives}`, 'gray');
+  log(`SCORE: Jaccard: ${overallRate}%  TP: ${totalTruePositives}  FP: ${totalFalsePositives}  FN: ${totalFalseNegatives} ${status}`, statusColor);
   
   if (overallRate >= 55) {
     log('\n✅ Analyzer is performing well against known-detectable issue categories.', 'green');
@@ -795,7 +819,10 @@ ${results.map(r => `| ${r.name} | ${r.expected} | ${r.detected} | ${r.rate}% | $
       branch: getCurrentBranch(),
       totalExpected,
       totalDetected,
-      overallRate,
+      totalTruePositives,
+      totalFalsePositives,
+      totalFalseNegatives,
+      overallRate,  // = Jaccard score (0-100)
       files: results,
     };
     const { isBaseline } = saveBattleResults(record);

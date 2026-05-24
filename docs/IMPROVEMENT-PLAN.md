@@ -193,30 +193,100 @@ Users have no predictable way to force a fresh analysis without:
 - ✅ Analysis duration logged
 - ✅ Analysis snapshot recorded for change detection
 
-### ⏳ REMAINING: Phase 1 (Loop Detection & Context Integration)
-- ❌ Loop detection logic
-- ❌ Recommendation history tracking
-- ❌ Skill JIT context loading integration
-- ❌ Feedback loop prevention
+### ✅ COMPLETED: Phase 1 (Loop Detection & Context Integration)
+- ✅ Loop detection logic (`detectLoops()` in `src/analyzers/llm.ts`)
+- ✅ Recommendation history tracking (`analysisHistory` Map keyed by document URI)
+- ✅ Skill YAML frontmatter parsing (`parseSkillMetadata()`)
+- ✅ Skill JIT context injected into LLM system prompt
+- ✅ Feedback loop warning diagnostic emitted when cycle detected
+- ✅ SHA256 content fingerprinting (`computeFingerprint()`)
+- ✅ Levenshtein similarity for fuzzy duplicate detection (`textSimilarity()`)
+- ✅ Issue deduplication by content hash (`computeIssueHash()`)
 
 ## Implementation Order
 
 1. ✅ **Phase 2** (cache & refresh) — DONE
 2. ✅ **Phase 3** (UX) — DONE
-3. ⏳ **Phase 1** (loop detection) — NEXT
+3. ✅ **Phase 1** (loop detection) — DONE
 
-## Immediate Todos
+---
 
-1. **Register `clearCacheAndRescan` in package.json**
-   - File: `client/package.json`
-   - Add to `contributes.commands` array
-   - Icon: `$(refresh)` or `$(sync)`
+## Phase 4: Battle-Test-Driven Prompt Engineering
 
-2. **Implement Phase 1: Loop Detection**
-   - File: `src/analyzers/llm.ts`
-   - Track recommendation history
-   - Parse skill YAML frontmatter for JIT context
-   - Detect and log feedback loops
+**Status:** ⏳ IN PROGRESS  
+**Branch:** `feature/analyzer-improvements` (worktree at `/workspace/vsce-feature`)  
+**Baseline commit:** `c79f93b` — PR #101 (safe model selection, no analyzer improvements)  
+**Test harness:** runs via `npm run analyze:battle` in `/workspace/vsce-feature`
+
+### ⚠️ Important: Do NOT test against `main`
+
+The `main` branch has a bug that causes it to always select an expensive model (no safe model selection). Only run battle tests against `feature/analyzer-improvements`.
+
+### Scoring: Jaccard / IoU
+
+`Jaccard = TP / (TP + FP + FN)`
+
+When FP=0, Jaccard equals recall. When FP>0, Jaccard directly penalises over-detection. Example: 10/15 with 0 FP → 67% (not 80% as F1 would give).
+
+### Baseline (c79f93b — 2026-05-24) — Jaccard scoring
+
+Run against `c79f93b` compiled code, same mock skills as improvement branch, using `gpt-4o-mini`:
+
+| Category | Expected | TP | FP | FN | **Jaccard** |
+|---|---|---|---|---|---|
+| Contradictions: Direct | 15 | 15 | 12 | 0 | **56%** |
+| Contradictions: Subtle | 12 | 12 | 13 | 0 | **48%** |
+| Ambiguities | 20 | 4 | 0 | 16 | **20%** |
+| Cognitive & Structural | 15 | 10 | 0 | 5 | **67%** |
+| Coverage Gaps | 15 | 0 | 0 | 15 | **0%** |
+| Instruction Quality | 15 | 7 | 0 | 8 | **47%** |
+| **Overall** | **92** | **48** | **25** | **44** | **41%** |
+
+### Current (feature/analyzer-improvements — 2026-05-24) — Jaccard scoring
+
+| Category | Expected | TP | FP | FN | **Jaccard** | vs Baseline |
+|---|---|---|---|---|---|---|
+| Contradictions: Direct | 15 | 15 | 12 | 0 | **56%** | ±0 |
+| Contradictions: Subtle | 12 | 12 | 2 | 0 | **86%** | **+38%** ✅ |
+| Ambiguities | 20 | 3 | 0 | 17 | **15%** | -5% |
+| Cognitive & Structural | 15 | 10 | 0 | 5 | **67%** | ±0 |
+| Coverage Gaps | 15 | 0 | 0 | 15 | **0%** | ±0 |
+| Instruction Quality | 15 | 3 | 0 | 12 | **20%** | **-27%** ⚠️ |
+| **Overall** | **92** | **43** | **14** | **49** | **41%** | ±0 |
+
+> Subtle contradictions improved significantly (FP: 13→2). Instruction quality regressed (TP: 7→3). Net cancels out at 41%.
+
+Baseline saved in: `battle-test-results/baseline.json`
+
+### Phase 4 Goals
+
+- **Fix instruction quality regression**: restore from 20% back to ≥47% baseline, then push higher
+- Raise Coverage Gaps from **0% → 40%+** (zero detection currently)
+- Raise Ambiguities from **15% → 40%+**
+- Reduce Direct Contradiction FP (12 FP → <5) without losing the 15/15 TP
+- Maintain Cognitive/Structural at **67%+**
+- Target overall: **Jaccard ≥ 60%** (from current 41%)
+
+### Approach
+
+Improve `src/analyzers/llm.ts` LLM prompts to:
+1. Fix instruction quality detection — diagnose why TP dropped from 7→3 vs baseline
+2. Add explicit detection for coverage gaps (missing scenarios, unhandled edge cases)
+3. Add explicit detection for ambiguities (vague terms, underspecified thresholds)
+4. Tighten contradiction detection to reduce FP (require true logical conflict, not topic overlap)
+
+### Workflow
+
+```bash
+# 1. Improve prompts in /workspace/vsce-feature/src/analyzers/llm.ts
+# 2. Build and test (NEVER run from main)
+cd /workspace/vsce-feature && npm run compile && node cli-analyzer.js --battle-test --dashboard
+# 3. Compare latest.json vs baseline.json automatically in dashboard
+```
+
+### Files to modify
+- `src/analyzers/llm.ts` — LLM system prompt and analysis phase prompts
+- `src/server.ts` — if new diagnostic codes needed for new categories
 
 ---
 
