@@ -50,6 +50,52 @@ function logSection(title) {
 }
 
 /**
+ * Build an LLMProxyFn that calls GitHub Models API using GITHUB_TOKEN.
+ * Uses gpt-4o-mini by default (cheap, avoids budget issues).
+ * Override with CLI_MODEL env var if needed.
+ */
+function createGitHubModelsProxy() {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error(
+      'GITHUB_TOKEN is not set. The CLI analyzer needs it to call the GitHub Models API.\n' +
+      'In a Codespace this is automatic. Locally: export GITHUB_TOKEN=<your token>'
+    );
+  }
+  const model = process.env.CLI_MODEL || 'gpt-4o-mini';
+  return async function({ prompt, systemPrompt }) {
+    const body = JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user',   content: prompt },
+      ],
+      max_tokens: 4096,
+      temperature: 0.1,
+    });
+    try {
+      const response = await fetch('https://models.inference.ai.azure.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
+      if (!response.ok) {
+        const err = await response.text();
+        return { text: '{}', error: `GitHub Models API ${response.status}: ${err.slice(0, 200)}` };
+      }
+      const data = await response.json();
+      const text = data.choices?.[0]?.message?.content ?? '{}';
+      return { text };
+    } catch (err) {
+      return { text: '{}', error: err.message };
+    }
+  };
+}
+
+/**
  * Create mock TextDocument from file
  */
 function createMockDoc(filePath, content) {
@@ -103,6 +149,7 @@ async function analyzeFile(filePath, options = {}) {
     const LLMAnalyzer = analyzerModule.LLMAnalyzer;
     
     const analyzer = new LLMAnalyzer();
+    analyzer.setProxyFn(createGitHubModelsProxy());
     const mockDoc = createMockDoc(filePath, content);
     
     log(`✅ Analyzer ready\n`, 'green');
