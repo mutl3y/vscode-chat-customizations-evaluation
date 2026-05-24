@@ -16,6 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -323,10 +324,267 @@ async function analyzeBatch(dirPath, options = {}) {
   log(`TOTAL: ${totalIssues} issues (${totalErrors} errors, ${totalWarnings} warnings)`, 'bright');
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Dashboard: persistence and HTML generation
+// ─────────────────────────────────────────────────────────────────────────
+
+const RESULTS_DIR    = path.join(__dirname, 'battle-test-results');
+const BASELINE_FILE  = path.join(RESULTS_DIR, 'baseline.json');   // first run ever — never overwritten
+const PREVIOUS_FILE  = path.join(RESULTS_DIR, 'previous.json');   // second-to-last run — for regression detection
+const LATEST_FILE    = path.join(RESULTS_DIR, 'latest.json');      // most recent run
+const DASHBOARD_FILE = path.join(RESULTS_DIR, 'dashboard.html');
+
+// Detection drop of more than this many percentage points vs the *previous* run
+// triggers a regression warning. Set > 0 to tolerate LLM non-determinism.
+const REGRESSION_TOLERANCE_PCT = 5;
+
+/** Map a diagnostic code to a human-readable category bucket. */
+function classifyCode(code) {
+  if (code === 'contradiction' || code === 'contradiction-related') return 'Contradictions';
+  if (code === 'ambiguity-llm') return 'Ambiguities';
+  if (code === 'persona-inconsistency') return 'Persona';
+  if (code.startsWith('cognitive-')) return 'Cognitive Load';
+  if (code === 'coverage-gap' || code === 'limited-coverage') return 'Coverage Gaps';
+  return 'Other';
+}
+
+function getCurrentBranch() {
+  try { return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim(); }
+  catch { return 'unknown'; }
+}
+
+/**
+ * Save a run record.
+ * - First call: also saves as baseline (never overwritten after that).
+ * - Every call: rotates current latest → previous, then writes new latest.
+ * Returns { isBaseline, hasPrevious }.
+ */
+function saveBattleResults(record) {
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  // Rotate: latest → previous before overwriting latest
+  const hasPrevious = fs.existsSync(LATEST_FILE);
+  if (hasPrevious) {
+    fs.copyFileSync(LATEST_FILE, PREVIOUS_FILE);
+  }
+  fs.writeFileSync(LATEST_FILE, JSON.stringify(record, null, 2));
+  const isBaseline = !fs.existsSync(BASELINE_FILE);
+  if (isBaseline) {
+    fs.writeFileSync(BASELINE_FILE, JSON.stringify(record, null, 2));
+  }
+  return { isBaseline, hasPrevious };
+}
+
+function loadBattleResults() {
+  return {
+    baseline: fs.existsSync(BASELINE_FILE) ? JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8')) : null,
+    previous: fs.existsSync(PREVIOUS_FILE) ? JSON.parse(fs.readFileSync(PREVIOUS_FILE, 'utf8')) : null,
+    latest:   fs.existsSync(LATEST_FILE)   ? JSON.parse(fs.readFileSync(LATEST_FILE,  'utf8')) : null,
+  };
+}
+
+/**
+ * Compares latest against previous and returns any regressions.
+ * A regression is a drop of more than REGRESSION_TOLERANCE_PCT on any file
+ * or on the overall score.
+ */
+function detectRegressions(previous, latest) {
+  if (!previous) return [];
+  const regressions = [];
+  const overallDrop = previous.overallRate - latest.overallRate;
+  if (overallDrop > REGRESSION_TOLERANCE_PCT) {
+    regressions.push({
+      type: 'overall',
+      label: 'Overall detection rate',
+      prev: previous.overallRate,
+      curr: latest.overallRate,
+      drop: overallDrop,
+    });
+  }
+  for (const lf of latest.files) {
+    const pf = previous.files.find(f => f.name === lf.name);
+    if (!pf) continue;
+    const drop = pf.rate - lf.rate;
+    if (drop > REGRESSION_TOLERANCE_PCT) {
+      regressions.push({
+        type: 'file',
+        label: lf.name,
+        prev: pf.rate,
+        curr: lf.rate,
+        drop,
+      });
+    }
+  }
+  return regressions;
+}
+
+function pctBar(pct, hex) {
+  const w = Math.min(100, Math.max(0, pct));
+  return `<div class="bar-wrap" title="${pct}%"><div class="bar" style="width:${w}%;background:${hex}"></div><span class="bar-lbl">${pct}%</span></div>`;
+}
+
+function deltaSpan(base, curr) {
+  if (base == null) return '';
+  const d = curr - base;
+  const cls = d > 0 ? 'pos' : d < 0 ? 'neg' : 'zero';
+  return `<span class="delta ${cls}">${d > 0 ? '+' : ''}${d}%</span>`;
+}
+
+/** Generates a fully self-contained HTML dashboard. */
+function generateDashboardHTML(baseline, previous, latest) {
+  // Enhancement roadmap — update status: 'done' | 'in-progress' | 'backlog'
+  const ROADMAP = [
+    { id: 'CW', title: 'Context waste detector',       detail: 'Verbatim repetition, non-actionable preamble, "think carefully" no-ops', status: 'backlog' },
+    { id: 'IQ', title: 'Obligation strength checker',  detail: '"try to / should / might want to" weak directives vs hard MUST requirements', status: 'backlog' },
+    { id: 'RA', title: 'Responsibility ambiguity',     detail: 'Passive voice hides actor; "use your judgment"; "consult appropriate expert"', status: 'backlog' },
+    { id: 'DI', title: 'Dead instruction detector',   detail: 'Instructions referencing removed features, schemes, or paths', status: 'backlog' },
+    { id: 'CD', title: 'Circular definition check',   detail: 'A defined using B, B defined using A (e.g. P0 = requires P0 response)', status: 'backlog' },
+    { id: 'OS', title: 'Over-specification warnings', detail: 'Trivial formatting micro-rules (exactly N spaces/chars) with no quality benefit', status: 'backlog' },
+  ];
+
+  const b = baseline;
+  const p = previous;   // may be null on second run
+  const l = latest;
+  const isFirstRun = b.timestamp === l.timestamp;
+
+  // Regression detection for the HTML banner
+  const regressions = p ? detectRegressions(p, l) : [];
+  const regressionBanner = regressions.length > 0
+    ? `<div class="alert">
+        <strong>⚠️ Regression detected vs previous run</strong>
+        <ul>${regressions.map(r => `<li>${r.label}: ${r.prev}% → ${r.curr}% (−${r.drop}%)</li>`).join('')}</ul>
+        <span class="alert-note">Tolerance: ±${REGRESSION_TOLERANCE_PCT}% (adjust REGRESSION_TOLERANCE_PCT in cli-analyzer.js)</span>
+      </div>`
+    : '';
+
+  const headerNote = isFirstRun
+    ? `<p class="note">⚠️  This is the baseline run — no previous data to compare against. Run again after making improvements to see a delta.</p>`
+    : `<p class="note">Baseline: <strong>${b.timestamp.substring(0,10)}</strong> (${b.branch})
+       ${p ? `&nbsp;|&nbsp; Previous: <strong>${p.timestamp.substring(0,10)}</strong> (${p.branch})` : ''}
+       &nbsp;|&nbsp; Current: <strong>${l.timestamp.substring(0,10)}</strong> (${l.branch})</p>`;
+
+  const CATS = ['Contradictions', 'Ambiguities', 'Cognitive Load', 'Persona', 'Coverage Gaps', 'Other'];
+
+  function catCounts(record) {
+    const m = {};
+    record.files.forEach(f => Object.entries(f.byCategory || {}).forEach(([k, v]) => { m[k] = (m[k] || 0) + v; }));
+    return m;
+  }
+  const lCats = catCounts(l);
+  const bCats = catCounts(b);
+  const pCats = p ? catCounts(p) : null;
+
+  const catRows = CATS.map(cat => {
+    const bv = bCats[cat] || 0;
+    const pv = pCats ? (pCats[cat] || 0) : null;
+    const lv = lCats[cat] || 0;
+    const dvl = lv - (pv ?? bv); // delta vs previous (or baseline if no previous)
+    const cls = dvl > 0 ? 'pos' : dvl < 0 ? 'neg' : 'zero';
+    const prevCell = pv != null ? `<td class="num">${pv}</td>` : '';
+    return `<tr><td>${cat}</td><td class="num">${bv}</td>${prevCell}<td class="num">${lv}</td><td class="num"><span class="delta ${cls}">${dvl > 0 ? '+' : ''}${dvl}</span></td></tr>`;
+  }).join('');
+  const catHeader = `<tr><th>Category</th><th style="text-align:right">Baseline</th>${p ? '<th style="text-align:right">Previous</th>' : ''}<th style="text-align:right">Current</th><th style="text-align:right">Δ vs prev</th></tr>`;
+
+  const fileRows = l.files.map(lf => {
+    const bf = b.files.find(f => f.name === lf.name);
+    const pf = p ? p.files.find(f => f.name === lf.name) : null;
+    const baseBar = bf ? pctBar(bf.rate, '#475569') : '<span class="muted">—</span>';
+    const prevBar = pf ? pctBar(pf.rate, '#854d0e') : (p ? '<span class="muted">—</span>' : '');
+    const currColor = lf.rate >= 55 ? '#22c55e' : lf.rate >= 35 ? '#f59e0b' : '#ef4444';
+    const currBar = pctBar(lf.rate, currColor);
+    const dVsPrev = deltaSpan(pf ? pf.rate : null, lf.rate);
+    const dVsBase = deltaSpan(bf ? bf.rate : null, lf.rate);
+    const isRegressed = pf && (pf.rate - lf.rate) > REGRESSION_TOLERANCE_PCT;
+    const rowCls = isRegressed ? ' class="regressed"' : '';
+    const prevBarCell = p ? `<td class="bars">${prevBar}</td>` : '';
+    const dVsPrevCell = p ? `<td class="num">${dVsPrev}</td>` : '';
+    return `<tr${rowCls}><td class="name">${lf.name}</td><td class="num">${lf.expected}</td><td class="bars">${baseBar}</td>${prevBarCell}<td class="bars">${currBar}</td><td class="num">${lf.detected}/${lf.expected}</td>${dVsPrevCell}<td class="num">${dVsBase}</td></tr>`;
+  }).join('');
+  const fileHeaderPrev = p ? '<th>Prev</th><th style="text-align:right">Δ prev</th>' : '';
+
+  const roadmapRows = ROADMAP.map(r => {
+    const icon = r.status === 'done' ? '✅' : r.status === 'in-progress' ? '🔄' : '🔜';
+    const rowCls = r.status === 'done' ? ' class="done-row"' : '';
+    return `<tr${rowCls}><td>${icon}</td><td><code>${r.id}</code></td><td>${r.title}</td><td class="detail">${r.detail}</td></tr>`;
+  }).join('');
+
+  const impVsBase = l.overallRate - b.overallRate;
+  const impVsPrev = p ? (l.overallRate - p.overallRate) : null;
+  const prevCard = p
+    ? `<div class="card neutral"><div class="lbl">Previous run</div><div class="val">${p.overallRate}%</div><div class="sub">${p.totalDetected} / ${p.totalExpected} &nbsp;·&nbsp; ${p.timestamp.substring(0,10)}</div></div>`
+    : '';
+  const regressionCardCls = impVsPrev != null ? (impVsPrev < -REGRESSION_TOLERANCE_PCT ? 'neg' : impVsPrev > 0 ? 'pos' : 'neutral') : 'neutral';
+  const regressionCard = p
+    ? `<div class="card ${regressionCardCls}"><div class="lbl">Δ vs previous</div><div class="val">${impVsPrev > 0 ? '+' : ''}${impVsPrev}%</div><div class="sub">${regressions.length > 0 ? `⚠️ ${regressions.length} regression(s) detected` : 'No regressions'}</div></div>`
+    : `<div class="card neutral"><div class="lbl">Δ vs baseline</div><div class="val">${impVsBase > 0 ? '+' : ''}${impVsBase}%</div><div class="sub">${l.branch}</div></div>`;
+
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Battle Test Dashboard</title><style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e2e8f0; padding: 28px 32px; font-size: 14px; }
+h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+h2 { font-size: 12px; font-weight: 600; margin: 32px 0 10px; color: #64748b; text-transform: uppercase; letter-spacing: .08em; }
+.note { color: #64748b; font-size: 12px; margin-bottom: 24px; }
+.alert { background: #450a0a; border: 1px solid #7f1d1d; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; }
+.alert strong { color: #fca5a5; display: block; margin-bottom: 6px; }
+.alert ul { margin: 0 0 6px 20px; color: #fca5a5; font-size: 13px; }
+.alert-note { color: #9ca3af; font-size: 11px; }
+.cards { display: flex; gap: 14px; margin: 18px 0 6px; flex-wrap: wrap; }
+.card { background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 18px 22px; flex: 1; min-width: 140px; }
+.card .lbl { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .07em; }
+.card .val { font-size: 36px; font-weight: 700; margin: 6px 0 2px; line-height: 1; }
+.card .sub { font-size: 11px; color: #64748b; }
+.neutral .val { color: #94a3b8; }
+.pos .val { color: #22c55e; }
+.neg .val { color: #ef4444; }
+.ceiling { font-size: 11px; color: #475569; margin: 0 0 4px; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+th { text-align: left; padding: 7px 12px; border-bottom: 1px solid #21262d; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+td { padding: 8px 12px; border-bottom: 1px solid #161b22; vertical-align: middle; }
+tr:hover td { background: #161b22; }
+tr.regressed td { background: #1c0a0a; }
+tr.regressed td:first-child::after { content: ' ⚠️'; }
+.done-row td { opacity: .5; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.name { max-width: 260px; font-size: 13px; }
+.bars { min-width: 110px; }
+.bar-wrap { position: relative; background: #21262d; border-radius: 4px; height: 20px; overflow: hidden; min-width: 90px; }
+.bar { height: 100%; border-radius: 4px; }
+.bar-lbl { position: absolute; right: 6px; top: 0; line-height: 20px; font-size: 11px; color: #fff; text-shadow: 0 1px 3px #000; font-weight: 600; }
+.delta { font-weight: 700; }
+.delta.pos { color: #22c55e; }
+.delta.neg { color: #ef4444; }
+.delta.zero { color: #94a3b8; }
+.detail { color: #64748b; font-size: 12px; max-width: 380px; }
+.muted { color: #475569; }
+code { background: #21262d; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style></head><body>
+<h1>⚔️ Analyzer Battle Test Dashboard</h1>
+${headerNote}
+${regressionBanner}
+<div class="cards">
+  <div class="card neutral"><div class="lbl">Baseline</div><div class="val">${b.overallRate}%</div><div class="sub">${b.totalDetected}/${b.totalExpected} &nbsp;·&nbsp; ${b.timestamp.substring(0,10)}</div></div>
+  ${prevCard}
+  <div class="card ${l.overallRate >= b.overallRate ? 'pos' : 'neg'}"><div class="lbl">Current</div><div class="val">${l.overallRate}%</div><div class="sub">${l.totalDetected}/${l.totalExpected} &nbsp;·&nbsp; ${l.timestamp.substring(0,10)}</div></div>
+  ${regressionCard}
+</div>
+<p class="ceiling">Tool ceiling ≈ 65% (59/91). ~32 issues need enhancement roadmap items. Regression tolerance: ±${REGRESSION_TOLERANCE_PCT}%.</p>
+
+<h2>Per-File Detection</h2>
+<table><tr><th>Skill file</th><th style="text-align:right">Injected</th><th>Baseline</th>${fileHeaderPrev}<th>Current</th><th style="text-align:right">Detected</th><th style="text-align:right">Δ base</th></tr>${fileRows}</table>
+
+<h2>By Analyzer Category (detected counts)</h2>
+<table>${catHeader}${catRows}</table>
+
+<h2>Enhancement Roadmap</h2>
+<p class="note">Mark items done by setting <code>status: 'done'</code> in the ROADMAP array in <code>cli-analyzer.js</code>, then re-run <code>npm run analyze:dashboard</code>.</p>
+<table><tr><th></th><th>ID</th><th>Feature</th><th>What it catches</th></tr>${roadmapRows}</table>
+</body></html>`;
+}
+
 /**
  * Run battle test suite
  */
-async function runBattleTest({ integration = false } = {}) {
+async function runBattleTest({ integration = false, dashboard = false } = {}) {
   logSection('🎯 Running Battle Test Suite');
 
   // Primary battle test: 6 focused skill files covering 91 injected issues.
@@ -425,6 +683,13 @@ async function runBattleTest({ integration = false } = {}) {
       const analysisResults = await analyzeFile(test.path, { silent: true });
       const detected = analysisResults.length;
       const rate = Math.round((detected / test.expected) * 100);
+
+      // Collect per-category breakdown for dashboard
+      const byCategory = {};
+      analysisResults.forEach(d => {
+        const cat = classifyCode(d.code || '');
+        byCategory[cat] = (byCategory[cat] || 0) + 1;
+      });
       
       const statusColor = rate >= 75 ? 'green' : rate >= 50 ? 'yellow' : 'red';
       const status = rate >= 75 ? '✅' : rate >= 50 ? '⚠️' : '❌';
@@ -440,6 +705,7 @@ async function runBattleTest({ integration = false } = {}) {
         detected,
         rate,
         category: test.category || '',
+        byCategory,
       });
     } catch (error) {
       log(`   ❌ Error: ${error.message}`, 'red');
@@ -475,6 +741,47 @@ ${results.map(r => `| ${r.name} | ${r.expected} | ${r.detected} | ${r.rate}% | $
   } else {
     log('\n❌ Analyzer needs work before the enhancement roadmap can be meaningful.', 'red');
   }
+
+  if (dashboard) {
+    const record = {
+      timestamp: new Date().toISOString(),
+      branch: getCurrentBranch(),
+      totalExpected,
+      totalDetected,
+      overallRate,
+      files: results,
+    };
+    const { isBaseline } = saveBattleResults(record);
+    const { baseline, previous, latest } = loadBattleResults();
+
+    // Regression check against previous run
+    const regressions = detectRegressions(previous, latest);
+    if (regressions.length > 0) {
+      log('\n🔴 REGRESSION DETECTED vs previous run:', 'red');
+      regressions.forEach(r => {
+        log(`   ${r.label}: ${r.prev}% → ${r.curr}% (−${r.drop}% — tolerance ±${REGRESSION_TOLERANCE_PCT}%)`, 'red');
+      });
+    } else if (previous) {
+      log('\n✅ No regressions vs previous run.', 'green');
+    }
+
+    const html = generateDashboardHTML(baseline, previous, latest);
+    fs.writeFileSync(DASHBOARD_FILE, html);
+    if (isBaseline) {
+      log(`\n📊 Baseline saved → ${BASELINE_FILE}`, 'cyan');
+      log(`   Run again after improvements to see a comparison.`, 'gray');
+    } else {
+      log(`\n📊 Results saved → ${LATEST_FILE}`, 'cyan');
+    }
+    log(`🌐 Dashboard → ${DASHBOARD_FILE}`, 'green');
+    log(`   Open with: open "${DASHBOARD_FILE}"`, 'gray');
+
+    // --check: exit non-zero if regressions found (useful for CI)
+    if (dashboard === 'check' && regressions.length > 0) {
+      log('\n❌ Exiting with code 1 due to regressions (--check mode).', 'red');
+      process.exit(1);
+    }
+  }
 }
 
 /**
@@ -494,13 +801,15 @@ Usage:
   node cli-analyzer.js <file> --report          Generate markdown report
   node cli-analyzer.js --battle-test            Run primary battle test suite (91 issues, 6 files)
   node cli-analyzer.js --battle-test --integration  Also run integration tests (JIT-reference skills)
+  node cli-analyzer.js --battle-test --dashboard    Save results + generate HTML dashboard
+  node cli-analyzer.js --battle-test --check        Dashboard + exit code 1 if regression (CI use)
 
 Examples:
   node cli-analyzer.js mock_skill/test-contradictions-direct/SKILL.md
   node cli-analyzer.js mock_skill --batch
   node cli-analyzer.js mock_skill/test-ambiguities/SKILL.md --json
   node cli-analyzer.js --battle-test
-  node cli-analyzer.js --battle-test --integration
+  node cli-analyzer.js --battle-test --dashboard
     `, 'cyan');
     process.exit(0);
   }
@@ -514,7 +823,10 @@ Examples:
 
   if (isBattleTest) {
     const integration = args.includes('--integration');
-    await runBattleTest({ integration });
+    // --dashboard: save results + generate HTML
+    // --check: same as --dashboard but exits non-zero if regressions found (for CI)
+    const dashboard = args.includes('--check') ? 'check' : args.includes('--dashboard') ? true : false;
+    await runBattleTest({ integration, dashboard });
     process.exit(0);
   }
 

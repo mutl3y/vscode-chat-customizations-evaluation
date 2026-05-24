@@ -27,6 +27,11 @@ npm-debug.log*
 .env.local
 .env.*.local
 
+# Battle test results — only baseline is committed
+battle-test-results/latest.json
+battle-test-results/previous.json
+battle-test-results/dashboard.html
+
 # IDE
 .idea/
 *.swp
