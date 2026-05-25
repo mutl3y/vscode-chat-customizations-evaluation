@@ -981,7 +981,7 @@ function generateDashboardHTML(baseline, previous, latest) {
     : `<div class="card neutral"><div class="lbl">Δ vs baseline</div><div class="val">${impVsBase > 0 ? '+' : ''}${impVsBase}%</div><div class="sub">${l.branch}</div></div>`;
 
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Battle Test Dashboard</title><style>
+<html lang="en"><head><meta charset="UTF-8"><meta name="gen" content="${latest.timestamp}"><title>Battle Test Dashboard</title><style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e2e8f0; padding: 28px 32px; font-size: 14px; }
 h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
@@ -1022,8 +1022,33 @@ tr.regressed td:first-child::after { content: ' ⚠️'; }
 .fp { color: #f97316; font-size: 11px; font-weight: 600; }
 .metric-sub { color: #94a3b8; font-size: 11px; margin-top: 2px; }
 code { background: #21262d; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+#refresh-bar { display: flex; align-items: center; gap: 10px; margin: 10px 0 18px; font-size: 12px; color: #64748b; }
+#refresh-bar .ring { width: 28px; height: 28px; flex-shrink: 0; }
+#refresh-bar .ring svg { transform: rotate(-90deg); transform-origin: 14px 14px; }
+#refresh-bar .ring circle { fill: none; stroke: #21262d; stroke-width: 3; }
+#refresh-bar .ring .arc { stroke: #22c55e; stroke-linecap: round; stroke-dasharray: 69.1; stroke-dashoffset: 0; }
+#refresh-bar .ring.paused .arc { stroke: #475569; opacity: .4; }
+#refresh-bar .ring.checking svg { animation: db-spin 1s linear infinite; }
+#refresh-bar .ring.checking .arc { stroke-dashoffset: 52; }
+#refresh-bar .ring.watching .arc { animation: db-pulse 2.5s ease-in-out infinite; }
+@keyframes db-spin  { to { transform: rotate(270deg); } }
+@keyframes db-pulse { 0%,100%{ opacity:.3 } 50%{ opacity:1 } }
+#refresh-bar .lbl { flex: 1; }
+#refresh-bar .lbl b { color: #94a3b8; }
+#refresh-toggle { background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #94a3b8; cursor: pointer; font-size: 11px; padding: 4px 10px; }
+#refresh-toggle:hover { background: #30363d; color: #e2e8f0; }
 </style></head><body>
 <h1>⚔️ Analyzer Battle Test Dashboard</h1>
+<div id="refresh-bar">
+  <div class="ring" id="refresh-ring">
+    <svg width="28" height="28" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="11"/>
+      <circle class="arc" id="refresh-arc" cx="14" cy="14" r="11" stroke-dasharray="69.1" stroke-dashoffset="0"/>
+    </svg>
+  </div>
+  <span class="lbl" id="refresh-lbl">Refreshing in <b id="refresh-countdown">10</b>s</span>
+  <button id="refresh-toggle" onclick="toggleRefresh()">Pause</button>
+</div>
 ${headerNote}
 ${regressionBanner}
 <div class="cards">
@@ -1043,6 +1068,49 @@ ${regressionBanner}
 <h2>Enhancement Roadmap</h2>
 <p class="note">Mark items done by setting <code>status: 'done'</code> in the ROADMAP array in <code>cli-analyzer.js</code>, then re-run <code>npm run analyze:dashboard</code>.</p>
 <table><tr><th></th><th>ID</th><th>Feature</th><th>What it catches</th></tr>${roadmapRows}</table>
+<script>
+(function() {
+  var POLL_MS = 3000;
+  var ring = document.getElementById('refresh-ring');
+  var lbl  = document.getElementById('refresh-lbl');
+  var btn  = document.getElementById('refresh-toggle');
+  var currentTs = (document.querySelector('meta[name="gen"]') || {}).content || '';
+  var paused = localStorage.getItem('db-ar-paused') === '1';
+  var timer = null;
+
+  function setUI(cls, text, btnText) {
+    ring.className = 'ring ' + cls;
+    lbl.innerHTML = text;
+    if (btnText) btn.textContent = btnText;
+  }
+
+  function poll() {
+    setUI('checking', 'Checking for updates\u2026');
+    fetch('/latest.json?_=' + Date.now())
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.timestamp && d.timestamp !== currentTs) { location.reload(); }
+        else { setUI('watching', 'Watching for changes'); }
+      })
+      .catch(function() { setUI('watching', 'Watching for changes'); });
+  }
+
+  function start() {
+    paused = false; localStorage.removeItem('db-ar-paused');
+    setUI('watching', 'Watching for changes', 'Pause');
+    timer = setInterval(poll, POLL_MS);
+  }
+
+  function stop() {
+    paused = true; localStorage.setItem('db-ar-paused', '1');
+    clearInterval(timer); timer = null;
+    setUI('paused', 'Auto-refresh <b>paused</b>', 'Resume');
+  }
+
+  window.toggleRefresh = function() { paused ? start() : stop(); };
+  paused ? setUI('paused', 'Auto-refresh <b>paused</b>', 'Resume') : start();
+})();
+</script>
 </body></html>`;
 }
 
@@ -1468,7 +1536,7 @@ ${results.map(r => `| ${r.name} | ${r.expected} | ${r.detected} | ${r.rate}% | $
     }
 
     const html = generateDashboardHTML(baseline, previous, latest);
-    fs.writeFileSync(DASHBOARD_FILE, html);
+    { const tmp = DASHBOARD_FILE + '.tmp'; fs.writeFileSync(tmp, html); fs.renameSync(tmp, DASHBOARD_FILE); }
     if (isBaseline) {
       log(`\n📊 Baseline saved → ${BASELINE_FILE}`, 'cyan');
       log(`   Run again after improvements to see a comparison.`, 'gray');
@@ -1484,6 +1552,68 @@ ${results.map(r => `| ${r.name} | ${r.expected} | ${r.detected} | ${r.rate}% | $
       process.exit(1);
     }
   }
+}
+
+/**
+ * Serve the battle-test dashboard on a local HTTP server.
+ * Watches latest.json and auto-regenerates dashboard.html on changes.
+ */
+async function serveDashboard(port) {
+  const { createServer } = await import('node:http');
+
+  const ROUTES = {
+    '/': DASHBOARD_FILE,
+    '/dashboard.html': DASHBOARD_FILE,
+    '/latest.json': LATEST_FILE,
+    '/baseline.json': BASELINE_FILE,
+    '/previous.json': PREVIOUS_FILE,
+  };
+  const MIME = { '.html': 'text/html; charset=utf-8', '.json': 'application/json' };
+
+  const server = createServer((req, res) => {
+    const pathname = (new URL(req.url, 'http://x')).pathname;
+    const filePath = ROUTES[pathname];
+    if (!filePath) { res.writeHead(404); res.end('Not found'); return; }
+    try {
+      const content = fs.readFileSync(filePath);
+      res.writeHead(200, {
+        'Content-Type': MIME[path.extname(filePath)] || 'text/plain',
+        'Cache-Control': 'no-store',
+      });
+      res.end(content);
+    } catch {
+      res.writeHead(404); res.end('Not found');
+    }
+  });
+
+  server.listen(port, '127.0.0.1', () => {
+    log(`\n🌐  Dashboard server → http://localhost:${port}`, 'green');
+    log(`    File watcher active — dashboard regenerates when latest.json changes`, 'gray');
+    log(`    Ctrl+C to stop\n`, 'gray');
+  });
+
+  // Regenerate dashboard.html whenever latest.json is updated
+  const watchTarget = fs.existsSync(LATEST_FILE) ? LATEST_FILE : RESULTS_DIR;
+  let regenTimer;
+  fs.watch(watchTarget, () => {
+    clearTimeout(regenTimer);
+    regenTimer = setTimeout(() => {
+      try {
+        const { baseline, previous, latest } = loadBattleResults();
+        if (!latest) return;
+        const html = generateDashboardHTML(baseline, previous, latest);
+        const tmp = DASHBOARD_FILE + '.tmp';
+        fs.writeFileSync(tmp, html);
+        fs.renameSync(tmp, DASHBOARD_FILE);
+        log('🔄 Dashboard regenerated', 'cyan');
+      } catch (e) {
+        log(`⚠️  Regen failed: ${e.message}`, 'yellow');
+      }
+    }, 300);
+  });
+
+  // Keep the process alive indefinitely
+  await new Promise(() => {});
 }
 
 /**
@@ -1505,6 +1635,8 @@ Usage:
   node cli-analyzer.js --battle-test --integration  Also run integration tests (JIT-reference skills)
   node cli-analyzer.js --battle-test --dashboard    Save results + generate HTML dashboard
   node cli-analyzer.js --battle-test --check        Dashboard + exit code 1 if regression (CI use)
+  node cli-analyzer.js --serve                       Serve dashboard on http://localhost:3333
+  node cli-analyzer.js --serve --port=8080           Serve on a custom port
 
 Examples:
   node cli-analyzer.js mock_skill/test-contradictions-direct/SKILL.md
@@ -1521,6 +1653,22 @@ Examples:
   const isJSON = args.includes('--json');
   const isReport = args.includes('--report');
   const isSinglePrompt = args.includes('--single-prompt');
+
+  if (args.includes('--serve')) {
+    const portArg = args.find(a => a.startsWith('--port='));
+    const port = portArg ? parseInt(portArg.split('=')[1], 10) : 3333;
+    await serveDashboard(port);
+    return;
+  }
+
+  if (args.includes('--regen-dashboard')) {
+    const { baseline, previous, latest } = loadBattleResults();
+    if (!latest) { log('No latest.json found — run --battle-test --dashboard first', 'red'); process.exit(1); }
+    const html = generateDashboardHTML(baseline, previous, latest);
+    { const tmp = DASHBOARD_FILE + '.tmp'; fs.writeFileSync(tmp, html); fs.renameSync(tmp, DASHBOARD_FILE); }
+    log(`🌐 Dashboard regenerated → ${DASHBOARD_FILE}`, 'green');
+    process.exit(0);
+  }
   
   const filePath = args.find(arg => !arg.startsWith('--'));
 
