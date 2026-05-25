@@ -1,16 +1,17 @@
 {
-  "timestamp": "2026-05-25T21:56:13.832Z",
+  "timestamp": "2026-05-25T23:00:50.313Z",
   "branch": "feature/analyzer-improvements",
-  "totalExpected": 476,
-  "totalDetected": 364,
-  "totalTruePositives": 362,
-  "totalFalsePositives": 2,
-  "totalFalseNegatives": 114,
-  "overallRate": 76,
+  "totalExpected": 579,
+  "totalDetected": 434,
+  "totalTruePositives": 434,
+  "totalFalsePositives": 0,
+  "totalFalseNegatives": 145,
+  "overallRate": 75,
   "files": [
     {
       "name": "Contradictions: Direct (15 injected)",
       "group": "PRIMARY",
+      "cached": true,
       "expected": 15,
       "detected": 15,
       "truePositives": 15,
@@ -26,6 +27,7 @@
     {
       "name": "Contradictions: Subtle (12 injected)",
       "group": "PRIMARY",
+      "cached": true,
       "expected": 12,
       "detected": 12,
       "truePositives": 12,
@@ -43,6 +45,7 @@
     {
       "name": "Ambiguities (20 injected)",
       "group": "PRIMARY",
+      "cached": true,
       "expected": 20,
       "detected": 20,
       "truePositives": 20,
@@ -66,26 +69,25 @@
       "category": "cognitive_load + persona + structural",
       "byCategory": {
         "Contradictions": 4,
-        "Ambiguities": 1,
+        "Ambiguities": 2,
         "Persona": 4,
         "Cognitive Load": 6,
-        "Coverage Gaps": 3
+        "Coverage Gaps": 2
       }
     },
     {
       "name": "Coverage Gaps (15 injected)",
       "group": "PRIMARY",
       "expected": 15,
-      "detected": 4,
-      "truePositives": 4,
+      "detected": 2,
+      "truePositives": 2,
       "falsePositives": 0,
-      "falseNegatives": 11,
-      "rate": 27,
+      "falseNegatives": 13,
+      "rate": 13,
       "category": "coverage_gap",
       "byCategory": {
-        "Ambiguities": 1,
-        "Cognitive Load": 1,
-        "Coverage Gaps": 4
+        "Ambiguities": 2,
+        "Coverage Gaps": 2
       }
     },
     {
@@ -102,7 +104,7 @@
         "Contradictions": 1,
         "Ambiguities": 8,
         "Cognitive Load": 3,
-        "Coverage Gaps": 4
+        "Coverage Gaps": 3
       }
     },
     {
@@ -126,22 +128,23 @@
       "name": "GitHub Codespaces Efficiency (integration)",
       "group": "INTEGRATION",
       "expected": 7,
-      "detected": 4,
-      "truePositives": 4,
+      "detected": 5,
+      "truePositives": 5,
       "falsePositives": 0,
-      "falseNegatives": 3,
-      "rate": 57,
+      "falseNegatives": 2,
+      "rate": 71,
       "category": "contradiction + ambiguity + coverage_gap",
       "byCategory": {
-        "Contradictions": 1,
+        "Contradictions": 2,
         "Ambiguities": 2,
-        "Cognitive Load": 1,
+        "Cognitive Load": 2,
         "Coverage Gaps": 1
       }
     },
     {
       "name": "Contradictions: Direct-2 (15 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 15,
       "detected": 15,
       "truePositives": 15,
@@ -157,6 +160,7 @@
     {
       "name": "Contradictions: Direct-3 (15 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 15,
       "detected": 15,
       "truePositives": 15,
@@ -171,6 +175,7 @@
     {
       "name": "Contradictions: Direct-4 (15 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 15,
       "detected": 15,
       "truePositives": 15,
@@ -186,6 +191,7 @@
     {
       "name": "Contradictions: Subtle-2 (12 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 12,
       "detected": 12,
       "truePositives": 12,
@@ -200,6 +206,7 @@
     {
       "name": "Contradictions: Subtle-3 (12 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 12,
       "detected": 12,
       "truePositives": 12,
@@ -214,6 +221,7 @@
     {
       "name": "Contradictions: Subtle-4 (12 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 12,
       "detected": 12,
       "truePositives": 12,
@@ -229,6 +237,7 @@
     {
       "name": "Ambiguities-2 (20 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 20,
       "detected": 20,
       "truePositives": 20,
@@ -243,6 +252,7 @@
     {
       "name": "Ambiguities-3 (20 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 20,
       "detected": 20,
       "truePositives": 20,
@@ -257,6 +267,7 @@
     {
       "name": "Ambiguities-4 (20 injected)",
       "group": "SECONDARY",
+      "cached": true,
       "expected": 20,
       "detected": 20,
       "truePositives": 20,
@@ -272,32 +283,36 @@
       "name": "Cognitive & Structural-2 (13 detectable / 15 injected)",
       "group": "SECONDARY",
       "expected": 13,
-      "detected": 0,
-      "truePositives": 0,
+      "detected": 7,
+      "truePositives": 7,
       "falsePositives": 0,
-      "falseNegatives": 13,
-      "rate": 0,
+      "falseNegatives": 6,
+      "rate": 54,
       "category": "cognitive_load + persona + structural",
       "byCategory": {
-        "Other": 1
+        "Contradictions": 3,
+        "Ambiguities": 2,
+        "Persona": 3,
+        "Cognitive Load": 4,
+        "Coverage Gaps": 3
       }
     },
     {
       "name": "Cognitive & Structural-3 (13 detectable / 15 injected)",
       "group": "SECONDARY",
       "expected": 13,
-      "detected": 9,
-      "truePositives": 9,
+      "detected": 8,
+      "truePositives": 8,
       "falsePositives": 0,
-      "falseNegatives": 4,
-      "rate": 69,
+      "falseNegatives": 5,
+      "rate": 62,
       "category": "cognitive_load + persona + structural",
       "byCategory": {
-        "Contradictions": 5,
-        "Ambiguities": 4,
+        "Contradictions": 4,
+        "Ambiguities": 2,
         "Persona": 4,
-        "Cognitive Load": 5,
-        "Coverage Gaps": 4
+        "Cognitive Load": 4,
+        "Coverage Gaps": 3
       }
     },
     {
@@ -341,7 +356,8 @@
       "rate": 87,
       "category": "coverage_gap",
       "byCategory": {
-        "Ambiguities": 2,
+        "Ambiguities": 3,
+        "Cognitive Load": 1,
         "Coverage Gaps": 13
       }
     },
@@ -366,17 +382,17 @@
       "name": "Instruction Quality-3 (14 detectable / 15 injected)",
       "group": "SECONDARY",
       "expected": 14,
-      "detected": 16,
-      "truePositives": 14,
-      "falsePositives": 2,
-      "falseNegatives": 0,
-      "rate": 88,
+      "detected": 13,
+      "truePositives": 13,
+      "falsePositives": 0,
+      "falseNegatives": 1,
+      "rate": 93,
       "category": "ambiguity + contradiction + cognitive_load",
       "byCategory": {
         "Contradictions": 1,
-        "Ambiguities": 11,
-        "Cognitive Load": 4,
-        "Coverage Gaps": 3
+        "Ambiguities": 10,
+        "Cognitive Load": 2,
+        "Coverage Gaps": 1
       }
     },
     {
@@ -393,7 +409,7 @@
         "Contradictions": 1,
         "Ambiguities": 10,
         "Cognitive Load": 2,
-        "Coverage Gaps": 3
+        "Coverage Gaps": 1
       }
     },
     {
@@ -481,21 +497,22 @@
       "name": "Mixed Structural (13 injected)",
       "group": "HYGIENE",
       "expected": 13,
-      "detected": 5,
-      "truePositives": 5,
+      "detected": 4,
+      "truePositives": 4,
       "falsePositives": 0,
-      "falseNegatives": 8,
-      "rate": 38,
+      "falseNegatives": 9,
+      "rate": 31,
       "category": "structural + ambiguity + contradiction",
       "byCategory": {
-        "Ambiguities": 4,
+        "Ambiguities": 3,
         "Cognitive Load": 1,
-        "Coverage Gaps": 2
+        "Coverage Gaps": 3
       }
     },
     {
       "name": "Obligation Strength (15 injected)",
       "group": "HYGIENE",
+      "cached": true,
       "expected": 15,
       "detected": 15,
       "truePositives": 15,
@@ -518,7 +535,7 @@
       "rate": 8,
       "category": "structural",
       "byCategory": {
-        "Ambiguities": 3,
+        "Ambiguities": 1,
         "Cognitive Load": 1,
         "Coverage Gaps": 1
       }
@@ -526,6 +543,7 @@
     {
       "name": "Responsibility Ambiguity (15 injected)",
       "group": "HYGIENE",
+      "cached": true,
       "expected": 15,
       "detected": 15,
       "truePositives": 15,
@@ -535,6 +553,109 @@
       "category": "ambiguity + structural",
       "byCategory": {
         "Ambiguities": 15
+      }
+    },
+    {
+      "name": "Contradictions Hard (15 injected — cross-section pairs)",
+      "group": "HARD",
+      "expected": 15,
+      "detected": 8,
+      "truePositives": 8,
+      "falsePositives": 0,
+      "falseNegatives": 7,
+      "rate": 53,
+      "category": "contradiction",
+      "byCategory": {
+        "Contradictions": 8,
+        "Cognitive Load": 1,
+        "Coverage Gaps": 1
+      }
+    },
+    {
+      "name": "Ambiguities Hard (20 injected — legally-weighted undefined terms)",
+      "group": "HARD",
+      "expected": 20,
+      "detected": 20,
+      "truePositives": 20,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "rate": 100,
+      "category": "ambiguity",
+      "byCategory": {
+        "Ambiguities": 20
+      }
+    },
+    {
+      "name": "Coverage Gaps Hard (15 injected — silent gaps in a thorough checklist)",
+      "group": "HARD",
+      "expected": 15,
+      "detected": 15,
+      "truePositives": 15,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "rate": 100,
+      "category": "coverage_gap",
+      "byCategory": {
+        "Coverage Gaps": 15
+      }
+    },
+    {
+      "name": "Obligation Strength Hard (15 injected — hedged safety-critical clauses)",
+      "group": "HARD",
+      "expected": 15,
+      "detected": 15,
+      "truePositives": 15,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "rate": 100,
+      "category": "obligation_strength",
+      "byCategory": {
+        "Ambiguities": 15
+      }
+    },
+    {
+      "name": "Circular Definitions Hard (10 injected — jargon-hidden loops)",
+      "group": "HARD",
+      "expected": 10,
+      "detected": 0,
+      "truePositives": 0,
+      "falsePositives": 0,
+      "falseNegatives": 10,
+      "rate": 0,
+      "category": "contradiction",
+      "byCategory": {
+        "Ambiguities": 4,
+        "Cognitive Load": 1,
+        "Coverage Gaps": 1
+      }
+    },
+    {
+      "name": "Dead Instructions Hard (12 injected — plausible deprecated APIs)",
+      "group": "HARD",
+      "expected": 12,
+      "detected": 0,
+      "truePositives": 0,
+      "falsePositives": 0,
+      "falseNegatives": 12,
+      "rate": 0,
+      "category": "structural",
+      "byCategory": {}
+    },
+    {
+      "name": "Mixed Hard (16 injected — all 6 adversarial sub-types)",
+      "group": "HARD",
+      "expected": 16,
+      "detected": 11,
+      "truePositives": 11,
+      "falsePositives": 0,
+      "falseNegatives": 5,
+      "rate": 69,
+      "category": "contradiction + ambiguity + obligation_strength + structural + coverage_gap",
+      "byCategory": {
+        "Contradictions": 2,
+        "Ambiguities": 6,
+        "Cognitive Load": 1,
+        "Coverage Gaps": 2
       }
     }
   ]

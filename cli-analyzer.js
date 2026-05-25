@@ -762,15 +762,22 @@ const DASHBOARD_FILE = path.join(RESULTS_DIR, 'dashboard.html');
 // triggers a regression warning. Set > 0 to tolerate LLM non-determinism.
 const REGRESSION_TOLERANCE_PCT = 5;
 
-/** Map a diagnostic code to a human-readable category bucket. */
+/** Map a diagnostic code to a human-readable category pillar.
+ *  Pillars: Contradictions | Clarity | Completeness | Structure | Other
+ */
 function classifyCode(code) {
-  if (code === 'contradiction') return 'Contradictions';
-  if (code === 'contradiction-related') return null; // supplemental marker only, not a separate issue
-  if (code === 'ambiguity-llm') return 'Ambiguities';
-  if (code === 'persona-inconsistency') return 'Persona';
-  if (code.startsWith('cognitive-') || code === 'high-complexity') return 'Cognitive Load';
-  if (code.startsWith('hygiene-')) return 'Cognitive Load';
-  if (code === 'coverage-gap' || code === 'limited-coverage') return 'Coverage Gaps';
+  if (code === 'contradiction-related') return null; // supplemental marker only
+  // Contradictions pillar — logical conflicts and circular reasoning
+  if (code === 'contradiction' || code === 'hygiene-circular-definition') return 'Contradictions';
+  // Clarity pillar — ambiguous, weak-obligation, or unowned instructions
+  if (code === 'ambiguity-llm' || code === 'persona-inconsistency' ||
+      code === 'hygiene-obligation-strength' || code === 'hygiene-missing-agent') return 'Clarity';
+  // Completeness pillar — missing coverage and dead/deprecated instructions
+  if (code === 'coverage-gap' || code === 'limited-coverage' ||
+      code === 'hygiene-dead-instruction') return 'Completeness';
+  // Structure pillar — cognitive load, waste, over-specification, other hygiene
+  if (code.startsWith('cognitive-') || code === 'high-complexity' ||
+      code.startsWith('hygiene-')) return 'Structure';
   return 'Other';
 }
 
@@ -781,12 +788,20 @@ function classifyCode(code) {
  */
 function parseCategoryBuckets(category) {
   const BUCKET_MAP = {
-    'contradiction': 'Contradictions',
-    'ambiguity': 'Ambiguities',
-    'cognitive_load': 'Cognitive Load',
-    'persona': 'Persona',
-    'structural': 'Cognitive Load',
-    'coverage_gap': 'Coverage Gaps',
+    // Contradictions pillar
+    'contradiction':          'Contradictions',
+    'circular_definition':    'Contradictions',
+    // Clarity pillar
+    'ambiguity':              'Clarity',
+    'obligation_strength':    'Clarity',
+    'responsibility_ambiguity': 'Clarity',
+    'persona':                'Clarity',
+    // Completeness pillar
+    'coverage_gap':           'Completeness',
+    'dead_instruction':       'Completeness',
+    // Structure pillar
+    'cognitive_load':         'Structure',
+    'structural':             'Structure',
   };
   return category.split('+').map(s => s.trim()).filter(Boolean)
     .map(k => BUCKET_MAP[k]).filter(Boolean);
@@ -906,7 +921,13 @@ function generateDashboardHTML(baseline, previous, latest) {
        ${p ? `&nbsp;|&nbsp; Previous: <strong>${p.timestamp.substring(0,10)}</strong> (${p.branch})` : ''}
        &nbsp;|&nbsp; Current: <strong>${l.timestamp.substring(0,10)}</strong> (${l.branch})</p>`;
 
-  const CATS = ['Contradictions', 'Ambiguities', 'Cognitive Load', 'Persona', 'Coverage Gaps', 'Other'];
+  // Ordered pillars first; then any dynamic keys found in results; 'Other' always last
+  const PILLARS = ['Contradictions', 'Clarity', 'Completeness', 'Structure'];
+  const allCatKeys = new Set();
+  [b, p, l].filter(Boolean).forEach(rec =>
+    rec.files.forEach(f => Object.keys(f.byCategory || {}).forEach(k => allCatKeys.add(k)))
+  );
+  const CATS = [...PILLARS, ...[...allCatKeys].filter(k => !PILLARS.includes(k) && k !== 'Other'), 'Other'];
 
   function catCounts(record) {
     const m = {};
@@ -917,14 +938,23 @@ function generateDashboardHTML(baseline, previous, latest) {
   const bCats = catCounts(b);
   const pCats = p ? catCounts(p) : null;
 
+  const PILLAR_SUB = {
+    'Contradictions': 'logical conflicts, circular definitions',
+    'Clarity':        'ambiguities, weak obligation, responsibility gaps, persona',
+    'Completeness':   'coverage gaps, dead / deprecated instructions',
+    'Structure':      'cognitive load, context waste, over-specification',
+    'Other':          'unmapped diagnostic codes',
+  };
+
   const catRows = CATS.map(cat => {
     const bv = bCats[cat] || 0;
     const pv = pCats ? (pCats[cat] || 0) : null;
     const lv = lCats[cat] || 0;
-    const dvl = lv - (pv ?? bv); // delta vs previous (or baseline if no previous)
+    const dvl = lv - (pv ?? bv);
     const cls = dvl > 0 ? 'pos' : dvl < 0 ? 'neg' : 'zero';
     const prevCell = pv != null ? `<td class="num">${pv}</td>` : '';
-    return `<tr><td>${cat}</td><td class="num">${bv}</td>${prevCell}<td class="num">${lv}</td><td class="num"><span class="delta ${cls}">${dvl > 0 ? '+' : ''}${dvl}</span></td></tr>`;
+    const sub = PILLAR_SUB[cat] ? `<br><span style="font-size:10px;color:#475569">${PILLAR_SUB[cat]}</span>` : '';
+    return `<tr><td>${cat}${sub}</td><td class="num">${bv}</td>${prevCell}<td class="num">${lv}</td><td class="num"><span class="delta ${cls}">${dvl > 0 ? '+' : ''}${dvl}</span></td></tr>`;
   }).join('');
   const catHeader = `<tr><th>Category</th><th style="text-align:right">Baseline</th>${p ? '<th style="text-align:right">Previous</th>' : ''}<th style="text-align:right">Current</th><th style="text-align:right">Δ vs prev</th></tr>`;
 
@@ -932,6 +962,7 @@ function generateDashboardHTML(baseline, previous, latest) {
     'PRIMARY':     '⚔️  Group 1 — Primary (mock_skill)',
     'SECONDARY':   '🔁 Group 2 — Secondary (mock_skills_2)',
     'HYGIENE':     '🧹 Group 3 — Hygiene Wave (mock_skills_3)',
+    'HARD':        '💀 Group 4 — Adversarial Hard (mock_skills_4)',
     'INTEGRATION': '🔗 Integration — JIT Reference Skills',
   };
 
@@ -1117,7 +1148,7 @@ ${regressionBanner}
 /**
  * Run battle test suite
  */
-async function runBattleTest({ integration = false, secondary = false, hygiene = false, dashboard = false, singlePrompt = false } = {}) {
+async function runBattleTest({ integration = false, secondary = false, hygiene = false, hard = false, dashboard = false, singlePrompt = false } = {}) {
   logSection('🎯 Running Battle Test Suite');
 
   // Primary battle test: 6 focused skill files covering 91 injected issues.
@@ -1340,11 +1371,59 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
     },
   ];
 
+  // GROUP 4 — Adversarial hard tests (mock_skills_4/)
+  // Real-world-domain skills where issues are deliberately camouflaged.
+  const HARD_TEST_FILES = [
+    {
+      name: 'Contradictions Hard (15 injected — cross-section pairs)',
+      path: path.join(__dirname, 'mock_skills_4', 'test-contradictions-hard', 'SKILL.md'),
+      expected: 15, category: 'contradiction', group: 'HARD',
+      note: 'Pairs separated 3-4 sections apart; numeric range overlaps; approver conflicts',
+    },
+    {
+      name: 'Ambiguities Hard (20 injected — legally-weighted undefined terms)',
+      path: path.join(__dirname, 'mock_skills_4', 'test-ambiguities-hard', 'SKILL.md'),
+      expected: 20, category: 'ambiguity', group: 'HARD',
+      note: 'Regulatory-sounding phrases that lack concrete definitions',
+    },
+    {
+      name: 'Coverage Gaps Hard (15 injected — silent gaps in a thorough checklist)',
+      path: path.join(__dirname, 'mock_skills_4', 'test-coverage-gaps-hard', 'SKILL.md'),
+      expected: 15, category: 'coverage_gap', group: 'HARD',
+      note: 'Obvious domains fully covered; gaps are in less-visible but critical areas',
+    },
+    {
+      name: 'Obligation Strength Hard (15 injected — hedged safety-critical clauses)',
+      path: path.join(__dirname, 'mock_skills_4', 'test-obligation-hard', 'SKILL.md'),
+      expected: 15, category: 'obligation_strength', group: 'HARD',
+      note: 'Strong verb up front, qualifying hedge buried later in the clause',
+    },
+    {
+      name: 'Circular Definitions Hard (10 injected — jargon-hidden loops)',
+      path: path.join(__dirname, 'mock_skills_4', 'test-circular-hard', 'SKILL.md'),
+      expected: 10, category: 'contradiction', group: 'HARD',
+      note: 'Technical vocabulary makes loops appear as precise domain definitions',
+    },
+    {
+      name: 'Dead Instructions Hard (12 injected — plausible deprecated APIs)',
+      path: path.join(__dirname, 'mock_skills_4', 'test-dead-hard', 'SKILL.md'),
+      expected: 12, category: 'structural', group: 'HARD',
+      note: 'Syntactically valid but removed/renamed in specific tool versions',
+    },
+    {
+      name: 'Mixed Hard (16 injected — all 6 adversarial sub-types)',
+      path: path.join(__dirname, 'mock_skills_4', 'test-mixed-hard', 'SKILL.md'),
+      expected: 16, category: 'contradiction + ambiguity + obligation_strength + structural + coverage_gap', group: 'HARD',
+      note: 'Hardest variant of each pattern type in a single coherent document',
+    },
+  ];
+
   const testFiles = (() => {
     const files = [...PRIMARY_TEST_FILES.map(f => ({ ...f, group: f.group || 'PRIMARY' }))];
     if (integration) files.push(...INTEGRATION_TEST_FILES.map(f => ({ ...f, group: f.group || 'INTEGRATION' })));
     if (secondary)    files.push(...SECONDARY_TEST_FILES);
     if (hygiene)      files.push(...HYGIENE_TEST_FILES);
+    if (hard)         files.push(...HARD_TEST_FILES);
     return files;
   })();
 
@@ -1352,6 +1431,7 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
   if (integration) modeParts.push('INTEGRATION');
   if (secondary)   modeParts.push('SECONDARY (mock_skills_2)');
   if (hygiene)     modeParts.push('HYGIENE (mock_skills_3)');
+  if (hard)        modeParts.push('HARD (mock_skills_4)');
   if (modeParts.length === 1) {
     log('Mode: PRIMARY only  (--secondary  --hygiene  --integration  --all)', 'gray');
     log('Total injected issues: 91 across 6 skill files', 'cyan');
@@ -1586,7 +1666,7 @@ async function serveDashboard(port) {
     }
   });
 
-  server.listen(port, '127.0.0.1', () => {
+  server.listen(port, '0.0.0.0', () => {
     log(`\n🌐  Dashboard server → http://localhost:${port}`, 'green');
     log(`    File watcher active — dashboard regenerates when latest.json changes`, 'gray');
     log(`    Ctrl+C to stop\n`, 'gray');
@@ -1633,6 +1713,10 @@ Usage:
   node cli-analyzer.js <file> --report          Generate markdown report
   node cli-analyzer.js --battle-test            Run primary battle test suite (91 issues, 6 files)
   node cli-analyzer.js --battle-test --integration  Also run integration tests (JIT-reference skills)
+  node cli-analyzer.js --battle-test --secondary    Also run secondary tests (mock_skills_2, 19 files)
+  node cli-analyzer.js --battle-test --hygiene      Also run hygiene tests (mock_skills_3, 7 files)
+  node cli-analyzer.js --battle-test --hard         Also run adversarial hard tests (mock_skills_4, 7 files)
+  node cli-analyzer.js --battle-test --all          Run all 41 test files (PRIMARY + INTEGRATION + SECONDARY + HYGIENE + HARD)
   node cli-analyzer.js --battle-test --dashboard    Save results + generate HTML dashboard
   node cli-analyzer.js --battle-test --check        Dashboard + exit code 1 if regression (CI use)
   node cli-analyzer.js --serve                       Serve dashboard on http://localhost:3333
@@ -1662,9 +1746,9 @@ Examples:
   }
 
   if (args.includes('--regen-dashboard')) {
-    const { baseline, previous, latest } = loadBattleResults();
-    if (!latest) { log('No latest.json found — run --battle-test --dashboard first', 'red'); process.exit(1); }
-    const html = generateDashboardHTML(baseline, previous, latest);
+    const { baseline: b2, previous: p2, latest: l2 } = loadBattleResults();
+    if (!l2) { log('No latest.json found — run --battle-test --dashboard first', 'red'); process.exit(1); }
+    const html = generateDashboardHTML(b2, p2, l2);
     { const tmp = DASHBOARD_FILE + '.tmp'; fs.writeFileSync(tmp, html); fs.renameSync(tmp, DASHBOARD_FILE); }
     log(`🌐 Dashboard regenerated → ${DASHBOARD_FILE}`, 'green');
     process.exit(0);
@@ -1677,10 +1761,11 @@ Examples:
     const integration  = isAll || args.includes('--integration');
     const secondary    = isAll || args.includes('--secondary');
     const hygiene      = isAll || args.includes('--hygiene');
+    const hard         = isAll || args.includes('--hard');
     // --dashboard: save results + generate HTML
     // --check: same as --dashboard but exits non-zero if regressions found (for CI)
     const dashboard    = args.includes('--check') ? 'check' : args.includes('--dashboard') ? true : false;
-    await runBattleTest({ integration, secondary, hygiene, dashboard, singlePrompt: isSinglePrompt });
+    await runBattleTest({ integration, secondary, hygiene, hard, dashboard, singlePrompt: isSinglePrompt });
     process.exit(0);
   }
 
