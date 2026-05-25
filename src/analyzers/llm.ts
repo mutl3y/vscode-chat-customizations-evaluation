@@ -217,13 +217,17 @@ Detect ONLY these five specific patterns:
 (f) UNORDERED SEQUENTIAL PROCESS — the prompt describes a multi-step process that must be performed in a specific order, but presents the steps as a flat comma-separated list, a run-on sentence, or prose with no explicit step numbering or sequencing words ("first", "then", "next", "step N"). The model cannot infer the required order or decide whether steps may be parallelised.
    Example: "To complete the process: gather all data, interview engineers, review graphs, identify factors, write action items, get sign-off, publish the document."
 
-Quality bar: Only report issues you are confident about. Each issue must clearly match one of the six patterns above.
+(g) OVER-SPECIFICATION — a rule prescribes an arbitrary cosmetic or structural metric (exact character count, exact word count, exact number of items, exact pixel/spacing value, exact column width, exact indentation) where the specific number has no functional justification and deviation would cause no meaningful harm to quality, accuracy, or readability.
+   Example: "Subject lines must be exactly 47 characters.", "Each paragraph must contain exactly 3 citations.", "Use exactly 2-space YAML indentation.", "Summaries must be exactly 47 words."
+   Do NOT fire when: the metric is functionally important (API rate limits, security constraints, regulated disclosure word counts), or when the rule says "at most N" or "at least N" rather than "exactly N".
+
+Quality bar: Only report issues you are confident about. Each issue must clearly match one of the seven patterns above.
 
 Respond ONLY with JSON in this exact format (use [] for an empty array):
 {
   "hygiene_issues": [
     {
-      "type": "redundant-instruction"|"non-actionable-preamble"|"vague-directive"|"missing-agent"|"dead-instruction"|"unordered-process",
+      "type": "redundant-instruction"|"non-actionable-preamble"|"vague-directive"|"missing-agent"|"dead-instruction"|"unordered-process"|"over-specification",
       "relevant_text": "exact short phrase from the prompt (≤ 15 words) that best locates this issue",
       "description": "One sentence explaining the specific problem.",
       "suggestion": "One sentence describing what to do instead.",

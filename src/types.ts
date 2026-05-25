@@ -86,7 +86,7 @@ export interface LLMCoverageResponse {
 
 export interface LLMHygieneResponse {
   hygiene_issues?: {
-    type: 'redundant-instruction' | 'non-actionable-preamble' | 'vague-directive' | 'missing-agent' | 'dead-instruction' | 'unordered-process';
+    type: 'redundant-instruction' | 'non-actionable-preamble' | 'vague-directive' | 'missing-agent' | 'dead-instruction' | 'unordered-process' | 'over-specification';
     relevant_text: string;
     description: string;
     suggestion: string;

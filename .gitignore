@@ -31,6 +31,7 @@ npm-debug.log*
 battle-test-results/latest.json
 battle-test-results/previous.json
 battle-test-results/dashboard.html
+battle-test-results/cache.json
 
 # IDE
 .idea/
