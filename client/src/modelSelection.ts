@@ -106,3 +106,43 @@ export function selectPreferredModel<T extends ModelCandidate>(
   log('[LLM Proxy] Error: all available models are classified as expensive; refusing automatic selection. Please set chatCustomizationsEvaluations.model explicitly.');
   return undefined;
 }
+
+// Preferred model families for deep/reasoning tasks (contradiction detection, etc.).
+// Ordered from most to least capable. These are selected over standard models when
+// the `modelTier: 'deep'` hint is passed, giving better results on subtle contradictions.
+export const PREFERRED_DEEP_FAMILIES: readonly string[] = [
+  'gpt-4.1',
+  'claude-sonnet',
+  'gemini-2.5-pro',
+  'gemini-3.1-pro',
+  'gpt-5.4',
+  'gpt-5.2',
+];
+
+/**
+ * Picks the most capable acceptable model from the deep-reasoning preference list.
+ * Falls back to the standard model picker if nothing from the deep list is available.
+ */
+export function selectPreferredDeepModel<T extends ModelCandidate>(
+  models: T[],
+  log: (message: string) => void = () => { /* no-op */ }
+): T | undefined {
+  if (models.length === 0) { return undefined; }
+
+  // Filter out copilotcli as with standard selection
+  const preferredVendor = models.some(m => m.vendor === 'copilot')
+    ? models.filter(m => m.vendor !== 'copilotcli')
+    : models;
+
+  for (const family of PREFERRED_DEEP_FAMILIES) {
+    const match = preferredVendor.find(m => m.family === family);
+    if (match) {
+      log(`[LLM Proxy] Deep model selected: ${match.name} (vendor=${match.vendor}, family=${family})`);
+      return match;
+    }
+  }
+
+  // Nothing from the deep list — fall back to standard selection
+  log('[LLM Proxy] No deep-reasoning model found; falling back to standard model selection.');
+  return selectPreferredModel(models, log);
+}

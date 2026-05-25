@@ -69,6 +69,11 @@
           "type": "string",
           "default": "gpt-4.1",
           "description": "Model to use for analysis (e.g., gpt-4o, gpt-4, gpt-3.5-turbo, etc). Defaults to gpt-4.1."
+        },
+        "chatCustomizationsEvaluations.reasoningModel": {
+          "type": "string",
+          "default": "",
+          "description": "Model family to use for deep-reasoning analysis (contradiction detection). Leave empty to auto-select the best available model. Example values: 'gpt-4.1', 'claude-sonnet', 'gemini-2.5-pro'."
         }
       }
     },

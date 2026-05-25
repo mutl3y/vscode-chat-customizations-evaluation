@@ -84,6 +84,16 @@ export interface LLMCoverageResponse {
   };
 }
 
+export interface LLMHygieneResponse {
+  hygiene_issues?: {
+    type: 'redundant-instruction' | 'non-actionable-preamble' | 'vague-directive' | 'missing-agent' | 'dead-instruction' | 'unordered-process';
+    relevant_text: string;
+    description: string;
+    suggestion: string;
+    severity: 'warning' | 'info';
+  }[];
+}
+
 // Analysis history tracking for loop detection
 export interface RecommendationRecord {
   /** Timestamp when recommendation was made */
@@ -143,6 +153,7 @@ export interface LLMCombinedAnalysisResponse {
     overall_complexity?: LLMCognitiveLoadResponse['overall_complexity'];
   };
   coverage_analysis?: LLMCoverageResponse['coverage_analysis'];
+  hygiene_issues?: LLMHygieneResponse['hygiene_issues'];
   composition_conflicts?: {
     summary: string;
     instruction1: string;

@@ -767,6 +767,7 @@ function classifyCode(code) {
   if (code === 'ambiguity-llm') return 'Ambiguities';
   if (code === 'persona-inconsistency') return 'Persona';
   if (code.startsWith('cognitive-') || code === 'high-complexity') return 'Cognitive Load';
+  if (code.startsWith('hygiene-')) return 'Cognitive Load';
   if (code === 'coverage-gap' || code === 'limited-coverage') return 'Coverage Gaps';
   return 'Other';
 }
@@ -1059,11 +1060,11 @@ async function runBattleTest({ integration = false, dashboard = false, singlePro
       category: 'ambiguity',
     },
     {
-      name: 'Cognitive & Structural (9 detectable / 15 injected)',
+      name: 'Cognitive & Structural (13 detectable / 15 injected)',
       path: path.join(__dirname, 'mock_skill', 'test-cognitive-structural', 'SKILL.md'),
-      expected: 9,
+      expected: 13,
       category: 'cognitive_load + persona + structural',
-      note: '6 structural issues not counted: 4 require new categories (STRUCTURAL-1/2/3/6), 2 produce out-of-scope contradiction codes (STRUCTURAL-4/5)',
+      note: '2 structural issues not counted: STRUCTURAL-4 (example-contradicts-rule, detected as contradiction/out-of-scope), STRUCTURAL-5 (circular-definition, detected as contradiction/out-of-scope)',
     },
     {
       name: 'Coverage Gaps (15 injected)',
@@ -1072,11 +1073,11 @@ async function runBattleTest({ integration = false, dashboard = false, singlePro
       category: 'coverage_gap',
     },
     {
-      name: 'Instruction Quality (11 detectable / 15 injected)',
+      name: 'Instruction Quality (13 detectable / 15 injected)',
       path: path.join(__dirname, 'mock_skill', 'test-instruction-quality', 'SKILL.md'),
-      expected: 11,
+      expected: 13,
       category: 'ambiguity + contradiction + cognitive_load',
-      note: '4 issues not counted: require new categories (QUALITY-5/6/10/11). QUALITY-12 and QUALITY-15 consistently detected — ceiling raised to 11.',
+      note: '2 issues not counted: require new categories (QUALITY-6/10). QUALITY-12 and QUALITY-15 consistently detected — ceiling raised to 11.',
 
     },
   ];
