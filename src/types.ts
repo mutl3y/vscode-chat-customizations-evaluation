@@ -17,6 +17,12 @@ export interface AnalysisResult {
 export interface LLMProxyRequest {
   prompt: string;
   systemPrompt: string;
+  /**
+   * Tier hint for the proxy. 'deep' requests a more capable model for
+   * tasks that require multi-step reasoning (e.g. contradiction detection).
+   * The proxy may ignore this if only one model is configured.
+   */
+  modelTier?: 'standard' | 'deep';
 }
 
 export interface LLMProxyResponse {

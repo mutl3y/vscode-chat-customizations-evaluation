@@ -1,0 +1,109 @@
+{
+  "timestamp": "2026-05-25T18:41:16.262Z",
+  "branch": "feature/analyzer-improvements",
+  "totalExpected": 80,
+  "totalDetected": 80,
+  "totalTruePositives": 74,
+  "totalFalsePositives": 6,
+  "totalFalseNegatives": 6,
+  "overallRate": 86,
+  "files": [
+    {
+      "name": "Contradictions: Direct (15 injected)",
+      "expected": 15,
+      "detected": 15,
+      "truePositives": 15,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "rate": 100,
+      "category": "contradiction",
+      "byCategory": {
+        "Contradictions": 15,
+        "null": 15,
+        "Cognitive Load": 5,
+        "Coverage Gaps": 1
+      }
+    },
+    {
+      "name": "Contradictions: Subtle (12 injected)",
+      "expected": 12,
+      "detected": 12,
+      "truePositives": 12,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "rate": 100,
+      "category": "contradiction",
+      "byCategory": {
+        "Contradictions": 12,
+        "null": 12,
+        "Ambiguities": 1,
+        "Cognitive Load": 4,
+        "Coverage Gaps": 1
+      }
+    },
+    {
+      "name": "Ambiguities (20 injected)",
+      "expected": 20,
+      "detected": 20,
+      "truePositives": 20,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "rate": 100,
+      "category": "ambiguity",
+      "byCategory": {
+        "Ambiguities": 20,
+        "Cognitive Load": 1
+      }
+    },
+    {
+      "name": "Cognitive & Structural (9 detectable / 15 injected)",
+      "expected": 9,
+      "detected": 9,
+      "truePositives": 9,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "rate": 100,
+      "category": "cognitive_load + persona + structural",
+      "byCategory": {
+        "Contradictions": 6,
+        "null": 6,
+        "Ambiguities": 2,
+        "Persona": 4,
+        "Cognitive Load": 5,
+        "Coverage Gaps": 1
+      }
+    },
+    {
+      "name": "Coverage Gaps (15 injected)",
+      "expected": 15,
+      "detected": 9,
+      "truePositives": 9,
+      "falsePositives": 0,
+      "falseNegatives": 6,
+      "rate": 60,
+      "category": "coverage_gap",
+      "byCategory": {
+        "Ambiguities": 3,
+        "Coverage Gaps": 9
+      }
+    },
+    {
+      "name": "Instruction Quality (9 detectable / 15 injected)",
+      "expected": 9,
+      "detected": 15,
+      "truePositives": 9,
+      "falsePositives": 6,
+      "falseNegatives": 0,
+      "rate": 60,
+      "category": "ambiguity + contradiction + cognitive_load",
+      "byCategory": {
+        "Contradictions": 1,
+        "null": 1,
+        "Ambiguities": 8,
+        "Persona": 1,
+        "Cognitive Load": 6,
+        "Coverage Gaps": 2
+      }
+    }
+  ]
+}

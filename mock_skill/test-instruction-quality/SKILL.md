@@ -22,10 +22,10 @@ Use this skill to produce technical documentation for engineering teams from Ope
 > | QUALITY-9 | "consider whether needed" without decision criteria | ambiguity | MAYBE |
 > | QUALITY-10 | Over-specifies trivial formatting (exactly N spaces/chars) | NEW: over-specification | NO |
 > | QUALITY-11 | Unreachable instruction (references removed feature) | NEW: dead-instruction | NO |
-> | QUALITY-12 | Excessive hedging stack: "in some cases, it may sometimes possibly" | ambiguity | MAYBE |
+> | QUALITY-12 | Excessive hedging stack: "in some cases, it may sometimes possibly" | ambiguity | YES |
 > | QUALITY-13 | Competing scope directives: be concise vs be comprehensive | contradiction | YES |
 > | QUALITY-14 | Prerequisite mentioned after the step that depends on it | cognitive_load | YES |
-> | QUALITY-15 | "it depends" without specifying on what | ambiguity / coverage_gap | MAYBE |
+> | QUALITY-15 | "it depends" without specifying on what | ambiguity / coverage_gap | YES |
 
 ## Writing Instructions
 

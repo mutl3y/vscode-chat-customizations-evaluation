@@ -17,11 +17,13 @@ import {
 } from './waza';
 import {
   selectPreferredModel,
+  selectPreferredDeepModel,
 } from './modelSelection';
 
 interface LLMProxyRequest {
   prompt: string;
   systemPrompt: string;
+  modelTier?: 'standard' | 'deep';
 }
 
 interface LLMProxyResponse {
@@ -673,6 +675,8 @@ let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
 let cachedModel: vscode.LanguageModelChat | undefined;
 let modelSelectionPromise: Promise<vscode.LanguageModelChat | undefined> | undefined;
+let cachedDeepModel: vscode.LanguageModelChat | undefined;
+let deepModelSelectionPromise: Promise<vscode.LanguageModelChat | undefined> | undefined;
 let extensionContext: vscode.ExtensionContext;
 let telemetryLogger: vscode.TelemetryLogger | undefined;
 type TelemetryData = Record<string, string | number | boolean | undefined>;
@@ -1159,6 +1163,8 @@ export function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine('[LLM Proxy] Models changed, clearing cache');
         cachedModel = undefined;
         modelSelectionPromise = undefined;
+        cachedDeepModel = undefined;
+        deepModelSelectionPromise = undefined;
       })
     );
   }
@@ -2147,6 +2153,64 @@ async function doSelectModel(): Promise<vscode.LanguageModelChat | undefined> {
   return cachedModel;
 }
 
+/**
+ * Select the best available deep/reasoning model for tasks like contradiction detection.
+ * Respects the `chatCustomizationsEvaluations.reasoningModel` user config.
+ * Falls back to the standard model if no capable deep model is available.
+ */
+async function selectDeepModel(): Promise<vscode.LanguageModelChat | undefined> {
+  if (cachedDeepModel) {
+    return cachedDeepModel;
+  }
+  if (deepModelSelectionPromise) {
+    return deepModelSelectionPromise;
+  }
+  deepModelSelectionPromise = doSelectDeepModel();
+  try {
+    return await deepModelSelectionPromise;
+  } finally {
+    deepModelSelectionPromise = undefined;
+  }
+}
+
+async function doSelectDeepModel(): Promise<vscode.LanguageModelChat | undefined> {
+  if (!vscode.lm || !vscode.lm.selectChatModels) {
+    return undefined;
+  }
+
+  const configuration = vscode.workspace.getConfiguration('chatCustomizationsEvaluations');
+  const userReasoningModel = configuration.get<string>('reasoningModel', '').trim();
+
+  if (userReasoningModel) {
+    outputChannel.appendLine(`[LLM Proxy] Looking for user-selected reasoning model: ${userReasoningModel}`);
+    const models = await vscode.lm.selectChatModels({ family: userReasoningModel });
+    if (models.length > 0) {
+      const preferred = models.find(m => m.vendor === 'copilot') || models[0];
+      cachedDeepModel = preferred;
+      outputChannel.appendLine(`[LLM Proxy] Using reasoning model: ${cachedDeepModel.name} (${cachedDeepModel.vendor}/${cachedDeepModel.family})`);
+      return cachedDeepModel;
+    }
+    outputChannel.appendLine('[LLM Proxy] Reasoning model not found, falling back to auto-select...');
+  }
+
+  let models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+  if (models.length === 0) {
+    models = await vscode.lm.selectChatModels();
+  }
+  if (models.length === 0) {
+    return undefined;
+  }
+
+  const selected = selectPreferredDeepModel(models, msg => outputChannel.appendLine(msg));
+  if (!selected) {
+    return undefined;
+  }
+
+  cachedDeepModel = selected;
+  outputChannel.appendLine(`[LLM Proxy] Using deep model: ${cachedDeepModel.name} (${cachedDeepModel.vendor}/${cachedDeepModel.family})`);
+  return cachedDeepModel;
+}
+
 const LLM_REQUEST_TIMEOUT_MS = 30_000;
 const WAZA_CREATE_TIMEOUT_MS = 30_000;
 const FIX_DIAGNOSTICS_IMPROVEMENT_TIMEOUT_MS = 5 * 60_000;
@@ -2156,7 +2220,9 @@ async function handleLLMProxyRequest(request: LLMProxyRequest): Promise<LLMProxy
   const timeout = setTimeout(() => cts.cancel(), LLM_REQUEST_TIMEOUT_MS);
   try {
     markAnalysisStageWithRequestCount('Preparing Copilot request payload...');
-    const model = await selectModel();
+    const model = request.modelTier === 'deep'
+      ? (await selectDeepModel() ?? await selectModel())
+      : await selectModel();
 
     if (!model) {
       return { text: '{}', error: 'No language models available — sign in to GitHub Copilot' };
