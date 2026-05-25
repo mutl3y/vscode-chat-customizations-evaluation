@@ -925,13 +925,23 @@ function generateDashboardHTML(baseline, previous, latest) {
   const PILLARS = ['Contradictions', 'Clarity', 'Completeness', 'Structure'];
   const allCatKeys = new Set();
   [b, p, l].filter(Boolean).forEach(rec =>
-    rec.files.forEach(f => Object.keys(f.byCategory || {}).forEach(k => allCatKeys.add(k)))
+    rec.files.forEach(f => Object.keys(f.byCategory || {}).forEach(k => k && allCatKeys.add(k)))
   );
   const CATS = [...PILLARS, ...[...allCatKeys].filter(k => !PILLARS.includes(k) && k !== 'Other'), 'Other'];
 
+  // Normalise both current pillar names and legacy sub-category names from
+  // old cache entries into the 4 canonical pillar keys.
+  const LEGACY_CAT_NORM = {
+    'Cognitive Load': 'Structure', 'Ambiguities': 'Clarity',
+    'Coverage Gaps':  'Completeness', 'Persona':   'Clarity',
+  };
   function catCounts(record) {
     const m = {};
-    record.files.forEach(f => Object.entries(f.byCategory || {}).forEach(([k, v]) => { m[k] = (m[k] || 0) + v; }));
+    record.files.forEach(f => Object.entries(f.byCategory || {}).forEach(([k, v]) => {
+      if (!k) return;
+      const key = LEGACY_CAT_NORM[k] || k;
+      m[key] = (m[key] || 0) + v;
+    }));
     return m;
   }
   const lCats = catCounts(l);
@@ -939,24 +949,70 @@ function generateDashboardHTML(baseline, previous, latest) {
   const pCats = p ? catCounts(p) : null;
 
   const PILLAR_SUB = {
-    'Contradictions': 'logical conflicts, circular definitions',
-    'Clarity':        'ambiguities, weak obligation, responsibility gaps, persona',
-    'Completeness':   'coverage gaps, dead / deprecated instructions',
-    'Structure':      'cognitive load, context waste, over-specification',
-    'Other':          'unmapped diagnostic codes',
+    'Contradictions': 'logical conflicts · circular definitions',
+    'Clarity':        'ambiguities · weak obligation · responsibility gaps · persona',
+    'Completeness':   'coverage gaps · dead / deprecated instructions',
+    'Structure':      'cognitive load · context waste · over-specification',
   };
 
-  const catRows = CATS.map(cat => {
-    const bv = bCats[cat] || 0;
-    const pv = pCats ? (pCats[cat] || 0) : null;
-    const lv = lCats[cat] || 0;
+  // Canonical code → pillar child definitions
+  const PILLAR_DEF = {
+    'Contradictions': [
+      { code: 'contradiction',               label: 'Direct contradiction' },
+      { code: 'hygiene-circular-definition', label: 'Circular definition' },
+    ],
+    'Clarity': [
+      { code: 'ambiguity-llm',               label: 'Ambiguity' },
+      { code: 'persona-inconsistency',       label: 'Persona conflict' },
+      { code: 'hygiene-obligation-strength', label: 'Weak obligation' },
+      { code: 'hygiene-missing-agent',       label: 'Missing agent / passive voice' },
+    ],
+    'Completeness': [
+      { code: 'coverage-gap',                label: 'Coverage gap' },
+      { code: 'limited-coverage',            label: 'Limited coverage' },
+      { code: 'hygiene-dead-instruction',    label: 'Dead instruction' },
+    ],
+    'Structure': [
+      { code: 'cognitive-load',              label: 'Cognitive load' },
+      { code: 'cognitive-complexity',        label: 'Complexity' },
+      { code: 'high-complexity',             label: 'High complexity' },
+      { code: 'hygiene-context-waste',       label: 'Context waste' },
+      { code: 'hygiene-over-specification',  label: 'Over-specification' },
+    ],
+  };
+
+  // Count a specific raw code across all files in a result record
+  function codeCount(record, code) {
+    if (!record) return 0;
+    return record.files.reduce((s, f) => s + ((f.byCode || {})[code] || 0), 0);
+  }
+
+  const catRows = PILLARS.map(pillar => {
+    const bv = bCats[pillar] || 0;
+    const pv = pCats ? (pCats[pillar] || 0) : null;
+    const lv = lCats[pillar] || 0;
     const dvl = lv - (pv ?? bv);
     const cls = dvl > 0 ? 'pos' : dvl < 0 ? 'neg' : 'zero';
     const prevCell = pv != null ? `<td class="num">${pv}</td>` : '';
-    const sub = PILLAR_SUB[cat] ? `<br><span style="font-size:10px;color:#475569">${PILLAR_SUB[cat]}</span>` : '';
-    return `<tr><td>${cat}${sub}</td><td class="num">${bv}</td>${prevCell}<td class="num">${lv}</td><td class="num"><span class="delta ${cls}">${dvl > 0 ? '+' : ''}${dvl}</span></td></tr>`;
+    const pillarRow = `<tr class="pillar-hdr"><td><strong>${pillar}</strong><br><span class="pillar-sub">${PILLAR_SUB[pillar] || ''}</span></td><td class="num">${bv}</td>${prevCell}<td class="num">${lv}</td><td class="num"><span class="delta ${cls}">${dvl > 0 ? '+' : ''}${dvl}</span></td></tr>`;
+
+    const children = (PILLAR_DEF[pillar] || [])
+      .filter(({code}) => codeCount(b, code) > 0 || codeCount(l, code) > 0 || (p && codeCount(p, code) > 0))
+      .map(({code, label}) => {
+        const bvc = codeCount(b, code);
+        const pvc = p ? codeCount(p, code) : null;
+        const lvc = codeCount(l, code);
+        const dvlc = lvc - (pvc ?? bvc);
+        const clsc = dvlc > 0 ? 'pos' : dvlc < 0 ? 'neg' : 'zero';
+        const prevCellC = pvc != null ? `<td class="num">${pvc}</td>` : '';
+        return `<tr class="code-row"><td><span class="indent">↳</span> ${label} <code class="ctag">${code}</code></td><td class="num">${bvc}</td>${prevCellC}<td class="num">${lvc}</td><td class="num"><span class="delta ${clsc}">${dvlc > 0 ? '+' : ''}${dvlc}</span></td></tr>`;
+      });
+    const noDataHint = children.length === 0
+      ? `<tr class="code-row"><td colspan="4" style="color:#334155;font-size:11px;padding-left:28px">↳ code-level breakdown available after next <code class="ctag">--battle-test</code> run</td></tr>`
+      : '';
+    return pillarRow + children.join('') + noDataHint;
   }).join('');
-  const catHeader = `<tr><th>Category</th><th style="text-align:right">Baseline</th>${p ? '<th style="text-align:right">Previous</th>' : ''}<th style="text-align:right">Current</th><th style="text-align:right">Δ vs prev</th></tr>`;
+  const catHeader = `<tr><th>Category / Code</th><th style="text-align:right">Baseline</th>${p ? '<th style="text-align:right">Previous</th>' : ''}<th style="text-align:right">Current</th><th style="text-align:right">Δ</th></tr>`;
 
   const GROUP_LABELS = {
     'PRIMARY':     '⚔️  Group 1 — Primary (mock_skill)',
@@ -965,6 +1021,14 @@ function generateDashboardHTML(baseline, previous, latest) {
     'HARD':        '💀 Group 4 — Adversarial Hard (mock_skills_4)',
     'INTEGRATION': '🔗 Integration — JIT Reference Skills',
   };
+
+  function gradeFor(rate) {
+    if (rate >= 90) return ['A', '#22c55e', '#052e16'];
+    if (rate >= 75) return ['B', '#84cc16', '#1a2e05'];
+    if (rate >= 60) return ['C', '#eab308', '#1c1700'];
+    if (rate >= 40) return ['D', '#f97316', '#1c0a00'];
+    return ['F', '#ef4444', '#1c0000'];
+  }
 
   let lastGroup = null;
   const fileRows = l.files.map(lf => {
@@ -981,7 +1045,9 @@ function generateDashboardHTML(baseline, previous, latest) {
     const prevBarCell = p ? `<td class="bars">${prevBar}</td>` : '';
     const dVsPrevCell = p ? `<td class="num">${dVsPrev}</td>` : '';
     const fpStr = (lf.falsePositives || 0) > 0 ? ` <span class="fp">+${lf.falsePositives}FP</span>` : '';
-    const dataRow = `<tr${rowCls}><td class="name">${lf.name}</td><td class="num">${lf.expected}</td><td class="bars">${baseBar}</td>${prevBarCell}<td class="bars">${currBar}</td><td class="num">${lf.truePositives ?? lf.detected}/${lf.expected}${fpStr}</td>${dVsPrevCell}<td class="num">${dVsBase}</td></tr>`;
+    const [gr, grBg, grFg] = gradeFor(lf.rate);
+    const badge = `<span class="grade-badge" style="background:${grBg};color:${grFg}">${gr}</span>`;
+    const dataRow = `<tr${rowCls}><td class="name">${badge} ${lf.name}</td><td class="num">${lf.expected}</td><td class="bars">${baseBar}</td>${prevBarCell}<td class="bars">${currBar}</td><td class="num">${lf.truePositives ?? lf.detected}/${lf.expected}${fpStr}</td>${dVsPrevCell}<td class="num">${dVsBase}</td></tr>`;
 
     const group = lf.group || 'PRIMARY';
     let groupRow = '';
@@ -1001,7 +1067,30 @@ function generateDashboardHTML(baseline, previous, latest) {
     return `<tr${rowCls}><td>${icon}</td><td><code>${r.id}</code></td><td>${r.title}</td><td class="detail">${r.detail}</td></tr>`;
   }).join('');
 
-  const impVsBase = l.overallRate - b.overallRate;
+  // Priority improvement plan — bottom performers sorted by Jaccard ascending
+  const planItems = [...l.files]
+    .sort((a, b2) => a.rate - b2.rate)
+    .map(f => {
+      const gap = f.expected - (f.truePositives ?? f.detected ?? 0);
+      const [gr, grBg, grFg] = gradeFor(f.rate);
+      const badge = `<span class="grade-badge" style="background:${grBg};color:${grFg}">${gr}</span>`;
+      const catHint = f.category ? f.category.split('+').map(c => `<code class="ctag">${c.trim()}</code>`).join(' ') : '';
+      const grp = f.group ? `<span style="color:#475569;font-size:11px">[${f.group}]</span>` : '';
+      return `<tr><td>${badge}</td><td class="num" style="color:#ef4444;font-weight:700">${f.rate}%</td><td class="name">${f.name} ${grp}</td><td class="num" style="color:#f97316">−${gap}</td><td class="detail">${catHint}</td></tr>`;
+    });
+  const planGoodRows = planItems.filter((_, i) => l.files.sort((a,b2)=>a.rate-b2.rate)[i].rate >= 75).join('');
+  const planBadRows  = planItems.filter((_, i) => l.files.sort((a,b2)=>a.rate-b2.rate)[i].rate  < 75).join('');
+  const planHTML = `
+<h2>Priority Improvement Plan</h2>
+<p class="note">Files scoring below 75% — ranked by gap. These are the highest-value targets for the next development wave.</p>
+<table>
+  <tr><th></th><th style="text-align:right">Score</th><th>Skill</th><th style="text-align:right">Missed</th><th>Category</th></tr>
+  ${planBadRows}
+</table>
+${planGoodRows ? `<p class="note" style="margin-top:8px">✅ ${l.files.filter(f=>f.rate>=75).length} skills already scoring ≥ 75% — maintain coverage.</p>` : ''}`;
+
+  const [analyzerGrade, agBg, agFg] = gradeFor(l.overallRate);
+  const analyzerGradeCard = `<div class="card neutral" style="border-color:${agBg}20"><div class="lbl">Analyzer Grade</div><div class="val" style="color:${agBg};font-size:48px">${analyzerGrade}</div><div class="sub">${l.overallRate}% overall Jaccard</div></div>`;
   const impVsPrev = p ? (l.overallRate - p.overallRate) : null;
   const prevCard = p
     ? `<div class="card neutral"><div class="lbl">Previous Jaccard</div><div class="val">${p.overallRate}%</div><div class="sub">TP: ${p.totalTruePositives}  FP: ${p.totalFalsePositives} &nbsp;·&nbsp; ${p.timestamp.substring(0,10)}</div></div>`
@@ -1053,6 +1142,14 @@ tr.regressed td:first-child::after { content: ' ⚠️'; }
 .fp { color: #f97316; font-size: 11px; font-weight: 600; }
 .metric-sub { color: #94a3b8; font-size: 11px; margin-top: 2px; }
 code { background: #21262d; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.ctag { background: #1e2a3a; color: #7dd3fc; font-size: 10px; padding: 1px 4px; }
+tr.pillar-hdr { background: #161b22; }
+tr.pillar-hdr td { padding: 10px 12px 8px; border-top: 2px solid #334155; font-size: 13px; }
+tr.code-row td { padding: 5px 12px; color: #94a3b8; font-size: 12px; border-bottom-color: #0d1117; }
+tr.code-row:last-child td { border-bottom: 1px solid #21262d; }
+.indent { color: #334155; margin-right: 4px; }
+.pillar-sub { font-size: 10px; color: #475569; }
+.grade-badge { display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; vertical-align: middle; margin-right: 4px; letter-spacing: .03em; }
 #refresh-bar { display: flex; align-items: center; gap: 10px; margin: 10px 0 18px; font-size: 12px; color: #64748b; }
 #refresh-bar .ring { width: 28px; height: 28px; flex-shrink: 0; }
 #refresh-bar .ring svg { transform: rotate(-90deg); transform-origin: 14px 14px; }
@@ -1083,6 +1180,7 @@ code { background: #21262d; padding: 1px 5px; border-radius: 4px; font-size: 12p
 ${headerNote}
 ${regressionBanner}
 <div class="cards">
+  ${analyzerGradeCard}
   <div class="card neutral"><div class="lbl">Baseline Jaccard</div><div class="val">${b.overallRate}%</div><div class="sub">TP: ${b.totalTruePositives}  FP: ${b.totalFalsePositives} &nbsp;·&nbsp; ${b.timestamp.substring(0,10)}</div></div>
   ${prevCard}
   <div class="card ${l.overallRate >= b.overallRate ? 'pos' : 'neg'}"><div class="lbl">Current Jaccard</div><div class="val">${l.overallRate}%</div><div class="sub">TP: ${l.totalTruePositives}  FP: ${l.totalFalsePositives} &nbsp;·&nbsp; ${l.timestamp.substring(0,10)}</div></div>
@@ -1095,6 +1193,8 @@ ${regressionBanner}
 
 <h2>By Analyzer Category (detected counts)</h2>
 <table>${catHeader}${catRows}</table>
+
+${planHTML}
 
 <h2>Enhancement Roadmap</h2>
 <p class="note">Mark items done by setting <code>status: 'done'</code> in the ROADMAP array in <code>cli-analyzer.js</code>, then re-run <code>npm run analyze:dashboard</code>.</p>
@@ -1510,11 +1610,14 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
         ? truePositives / (truePositives + falsePositives + falseNegatives) : 0;
       const rate      = Math.round(jaccard * 100);  // primary score: Jaccard (0-100)
 
-      // Collect per-category breakdown for dashboard
+      // Collect per-category and per-code breakdowns for dashboard
       const byCategory = {};
+      const byCode = {};
       analysisResults.forEach(d => {
-        const cat = classifyCode(d.code || '');
-        byCategory[cat] = (byCategory[cat] || 0) + 1;
+        const code = d.code || 'unknown';
+        byCode[code] = (byCode[code] || 0) + 1;
+        const cat = classifyCode(code);
+        if (cat) byCategory[cat] = (byCategory[cat] || 0) + 1;
       });
 
       const statusColor = rate >= 65 ? 'green' : rate >= 40 ? 'yellow' : 'red';
@@ -1543,6 +1646,7 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
         rate,  // = Jaccard score (0-100); used by regression detection and dashboard bars
         category: test.category || '',
         byCategory,
+        byCode,
       };
       results.push(resultRecord);
       // Persist perfect scores so next run can skip them
