@@ -897,7 +897,7 @@ function generateDashboardHTML(baseline, previous, latest) {
     { id: 'RA', title: 'Responsibility ambiguity',     detail: 'Passive voice hides actor; "use your judgment"; "consult appropriate expert"', status: 'done' },
     { id: 'DI', title: 'Dead instruction detector',   detail: 'Instructions referencing removed features, schemes, or paths', status: 'done' },
     { id: 'OS', title: 'Over-specification warnings', detail: 'Trivial formatting micro-rules (exactly N spaces/chars) with no quality benefit', status: 'done' },
-    { id: 'CD', title: 'Circular definition check',   detail: 'A defined using B, B defined using A (e.g. P0 = requires P0 response)', status: 'in-progress' },
+    { id: 'CD', title: 'Circular definition check',   detail: 'A defined using B, B defined using A (e.g. P0 = requires P0 response)', status: 'done' },
   ];
 
   const b = baseline;
@@ -1034,7 +1034,6 @@ function generateDashboardHTML(baseline, previous, latest) {
   const fileRows = l.files.map(lf => {
     const bf = b.files.find(f => f.name === lf.name);
     const pf = p ? p.files.find(f => f.name === lf.name) : null;
-    const baseBar = bf ? pctBar(bf.rate, '#475569') : '<span class="muted">—</span>';
     const prevBar = pf ? pctBar(pf.rate, '#854d0e') : (p ? '<span class="muted">—</span>' : '');
     const currColor = lf.rate >= 55 ? '#22c55e' : lf.rate >= 35 ? '#f59e0b' : '#ef4444';
     const currBar = pctBar(lf.rate, currColor);
@@ -1044,22 +1043,26 @@ function generateDashboardHTML(baseline, previous, latest) {
     const rowCls = isRegressed ? ' class="regressed"' : '';
     const prevBarCell = p ? `<td class="bars">${prevBar}</td>` : '';
     const dVsPrevCell = p ? `<td class="num">${dVsPrev}</td>` : '';
+    const baseBarCell = (!isFirstRun && bf) ? `<td class="bars">${pctBar(bf.rate, '#475569')}</td>` : '';
+    const dVsBaseCell = !isFirstRun ? `<td class="num">${dVsBase}</td>` : '';
     const fpStr = (lf.falsePositives || 0) > 0 ? ` <span class="fp">+${lf.falsePositives}FP</span>` : '';
     const [gr, grBg, grFg] = gradeFor(lf.rate);
     const badge = `<span class="grade-badge" style="background:${grBg};color:${grFg}">${gr}</span>`;
-    const dataRow = `<tr${rowCls}><td class="name">${badge} ${lf.name}</td><td class="num">${lf.expected}</td><td class="bars">${baseBar}</td>${prevBarCell}<td class="bars">${currBar}</td><td class="num">${lf.truePositives ?? lf.detected}/${lf.expected}${fpStr}</td>${dVsPrevCell}<td class="num">${dVsBase}</td></tr>`;
+    const dataRow = `<tr${rowCls} data-grade="${gr}"><td class="name">${badge} ${lf.name}</td><td class="num">${lf.expected}</td>${baseBarCell}${prevBarCell}<td class="bars">${currBar}</td><td class="num">${lf.truePositives ?? lf.detected}/${lf.expected}${fpStr}</td>${dVsPrevCell}${dVsBaseCell}</tr>`;
 
     const group = lf.group || 'PRIMARY';
     let groupRow = '';
     if (group !== lastGroup) {
       lastGroup = group;
-      const colSpan = p ? 8 : 6;
+      const colSpan = isFirstRun ? (p ? 5 : 3) : (p ? 8 : 6);
       const label = GROUP_LABELS[group] || group;
       groupRow = `<tr class="group-header"><td colspan="${colSpan}" style="padding:10px 12px 4px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;background:#0d1117;border-bottom:1px solid #30363d;">${label}</td></tr>`;
     }
     return groupRow + dataRow;
   }).join('');
+  const fileHeaderBase = !isFirstRun ? '<th>Baseline</th>' : '';
   const fileHeaderPrev = p ? '<th>Prev</th><th style="text-align:right">Δ prev</th>' : '';
+  const fileHeaderDelta = !isFirstRun ? '<th style="text-align:right">Δ base</th>' : '';
 
   const roadmapRows = ROADMAP.map(r => {
     const icon = r.status === 'done' ? '✅' : r.status === 'in-progress' ? '🔄' : '🔜';
@@ -1176,6 +1179,7 @@ tr.code-row:last-child td { border-bottom: 1px solid #21262d; }
   </div>
   <span class="lbl" id="refresh-lbl">Refreshing in <b id="refresh-countdown">10</b>s</span>
   <button id="refresh-toggle" onclick="toggleRefresh()">Pause</button>
+  <button id="pass-toggle" onclick="togglePassing()" style="margin-left:4px">Hide passing</button>
 </div>
 ${headerNote}
 ${regressionBanner}
@@ -1189,7 +1193,7 @@ ${regressionBanner}
 <p class="ceiling">Scores are Jaccard / IoU: TP÷(TP+FP+FN). Equals recall when FP=0; penalises false positives directly. Regression tolerance: ±${REGRESSION_TOLERANCE_PCT}%.</p>
 
 <h2>Per-File Detection</h2>
-<table><tr><th>Skill file</th><th style="text-align:right">Injected</th><th>Baseline</th>${fileHeaderPrev}<th>Current</th><th style="text-align:right">Detected</th><th style="text-align:right">Δ base</th></tr>${fileRows}</table>
+<table><tr><th>Skill file</th><th style="text-align:right">Injected</th>${fileHeaderBase}${fileHeaderPrev}<th>Current</th><th style="text-align:right">Detected</th>${fileHeaderDelta}</tr>${fileRows}</table>
 
 <h2>By Analyzer Category (detected counts)</h2>
 <table>${catHeader}${catRows}</table>
@@ -1240,6 +1244,36 @@ ${planHTML}
 
   window.toggleRefresh = function() { paused ? start() : stop(); };
   paused ? setUI('paused', 'Auto-refresh <b>paused</b>', 'Resume') : start();
+
+  // Hide-passing toggle
+  var passingHidden = localStorage.getItem('db-hide-passing') === '1';
+  var passBtn = document.getElementById('pass-toggle');
+  function applyPassFilter() {
+    var rows = document.querySelectorAll('tr[data-grade]');
+    rows.forEach(function(r) {
+      r.style.display = (passingHidden && r.dataset.grade === 'A') ? 'none' : '';
+    });
+    // hide group-header rows that have no visible data rows below them
+    var headers = document.querySelectorAll('tr.group-header');
+    headers.forEach(function(h) {
+      var sib = h.nextElementSibling;
+      var hasVisible = false;
+      while (sib && !sib.classList.contains('group-header')) {
+        if (sib.style.display !== 'none') { hasVisible = true; break; }
+        sib = sib.nextElementSibling;
+      }
+      h.style.display = hasVisible ? '' : 'none';
+    });
+    passBtn.textContent = passingHidden ? 'Show all' : 'Hide passing';
+    passBtn.style.background = passingHidden ? '#1e3a2f' : '';
+    passBtn.style.color = passingHidden ? '#4ade80' : '';
+  }
+  window.togglePassing = function() {
+    passingHidden = !passingHidden;
+    passingHidden ? localStorage.setItem('db-hide-passing','1') : localStorage.removeItem('db-hide-passing');
+    applyPassFilter();
+  };
+  applyPassFilter();
 })();
 </script>
 </body></html>`;
@@ -1433,7 +1467,7 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
       name: 'Circular Definitions (10 injected)',
       path: path.join(__dirname, 'mock_skills_3', 'test-circular-definitions', 'SKILL.md'),
       expected: 10, category: 'contradiction', group: 'HYGIENE',
-      note: 'Circular definitions detected by contradiction wave; dedicated hygiene-circular-definition code is backlog',
+      note: 'Detected by hygiene wave (circular-definition pattern added May 2026)',
     },
     {
       name: 'Context Waste (9 detectable / 12 labeled)',

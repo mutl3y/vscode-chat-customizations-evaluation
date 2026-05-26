@@ -221,13 +221,18 @@ Detect ONLY these five specific patterns:
    Example: "Subject lines must be exactly 47 characters.", "Each paragraph must contain exactly 3 citations.", "Use exactly 2-space YAML indentation.", "Summaries must be exactly 47 words."
    Do NOT fire when: the metric is functionally important (API rate limits, security constraints, regulated disclosure word counts), or when the rule says "at most N" or "at least N" rather than "exactly N".
 
-Quality bar: Only report issues you are confident about. Each issue must clearly match one of the seven patterns above.
+(h) CIRCULAR DEFINITION — a term is defined by reference to a second term, and that second term is itself defined by reference back to the first, creating a definitional loop that provides no actionable meaning. Both definitions must appear in the document.
+   Pattern: "An X is [something that satisfies/meets/requires] Y. Y is [the criteria/process/standard] that applies to X."
+   Example: "A formal warning is issued when conduct warrants formal disciplinary action. Formal disciplinary action is the process applied when conduct warrants a formal warning."
+   Only flag when BOTH sides of the loop are explicitly stated in the document. Do NOT flag a single-sided definition, even if it seems circular in isolation.
+
+Quality bar: Only report issues you are confident about. Each issue must clearly match one of the eight patterns above.
 
 Respond ONLY with JSON in this exact format (use [] for an empty array):
 {
   "hygiene_issues": [
     {
-      "type": "redundant-instruction"|"non-actionable-preamble"|"vague-directive"|"missing-agent"|"dead-instruction"|"unordered-process"|"over-specification",
+      "type": "redundant-instruction"|"non-actionable-preamble"|"vague-directive"|"missing-agent"|"dead-instruction"|"unordered-process"|"over-specification"|"circular-definition",
       "relevant_text": "exact short phrase from the prompt (≤ 15 words) that best locates this issue",
       "description": "One sentence explaining the specific problem.",
       "suggestion": "One sentence describing what to do instead.",
@@ -1014,15 +1019,16 @@ Respond ONLY with JSON in this exact format (use [] for an empty array):
     }
 
     for (const gap of analysis.coverage_gaps || []) {
-      // Only surface high-impact gaps — medium/low regenerate on every fix
-      if (gap.impact !== 'high') {
+      // Skip low-impact gaps entirely — too noisy
+      if (gap.impact === 'low') {
         continue;
       }
       const r = this.findTextRange(doc, gap.relevant_text);
       results.push({
         code: 'coverage-gap',
         message: `Coverage gap: ${gap.gap}. Suggestion: ${gap.suggestion}`,
-        severity: 'warning',
+        // medium-impact → info severity; high-impact → warning
+        severity: gap.impact === 'high' ? 'warning' : 'info',
         range: {
           start: { line: r.line, character: r.startChar },
           end: { line: r.line, character: r.endChar },
