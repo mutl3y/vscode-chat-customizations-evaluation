@@ -1549,10 +1549,10 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
   // Real-world-domain skills where issues are deliberately camouflaged.
   const HARD_TEST_FILES = [
     {
-      name: 'Contradictions Hard (15 injected — cross-section pairs)',
+      name: 'Contradictions Hard (8 pairs / 15 labeled sides)',
       path: path.join(__dirname, 'mock_skills_4', 'test-contradictions-hard', 'SKILL.md'),
-      expected: 15, category: 'contradiction', group: 'HARD',
-      note: 'Pairs separated 3-4 sections apart; numeric range overlaps; approver conflicts',
+      expected: 8, category: 'contradiction', group: 'HARD',
+      note: '15 injected labels form 8 contradiction pairs; each pair reported as one finding (max detectable = 8)',
     },
     {
       name: 'Ambiguities Hard (20 injected — legally-weighted undefined terms)',
