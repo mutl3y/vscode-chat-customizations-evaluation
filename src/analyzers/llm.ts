@@ -41,12 +41,12 @@ For domain-inference contradictions (practical effects are mutually exclusive ev
 
 SYSTEMATIC CROSS-DOCUMENT SCAN — contradictions are frequently separated by 3 or more sections.
 After reading the full document, perform these dedicated passes:
-1. Numeric range conflicts — same threshold, limit, count, or percentage defined as different values in different sections
-2. Same-term-different-definition — same technical term has incompatible meanings or scopes in two sections
+1. Numeric range conflicts — check every threshold, classification boundary, and numeric range. Flag when a single value satisfies two DIFFERENT classification rules simultaneously (e.g., ">$500 = high-cost" and "$200–$800 = medium-cost" both apply to a $600 resource — the $500–$800 band is claimed by both rules). This is a conflict even when the two threshold VALUES are different.
+2. Same-term-different-definition OR overlapping-population conflicts — same technical term defined with incompatible meanings; OR two different definitions that cover an overlapping set of entities but prescribe different procedures or timelines for the overlap (e.g., "idle = CPU<5% for 7 days, report in 3 days" and "rightsizing eligible = CPU<10% for 5 days, action in 2 weeks" — every idle resource also qualifies for rightsizing, creating a conflict about which procedure governs and which timeline applies).
 3. Approval/authority conflicts — two sections name different people, roles, or processes as responsible for the same decision
 4. Enable/disable conflicts — same feature, behaviour, or policy is required in one section and forbidden or disabled in another
 5. Floor-vs-ceiling conflicts — two constraints that cannot both be satisfied simultaneously (e.g., "must be ≥60%" in one place and "must be ≤40%" in another)
-6. Scope overlap conflicts — an instruction that applies to "all X" directly contradicts a rule that carves out a specific X and assigns it opposite treatment
+6. Scope overlap conflicts — an instruction that applies to "all X" directly contradicts a rule that carves out a specific X and assigns it opposite treatment. Also check automatic lifecycle or transition rules (e.g., "all objects not accessed in 90 days are moved to cold storage") against specific retention or availability requirements in other sections (e.g., "audit logs must remain in hot storage for 180 days") — the lifecycle rule may silently violate the retention rule for that specific data class.
 
 Respond ONLY with JSON in this exact format (use [] for an empty array):
 {
