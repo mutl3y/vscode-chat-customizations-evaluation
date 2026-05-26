@@ -888,6 +888,35 @@ function deltaSpan(base, curr) {
   return `<span class="delta ${cls}">${d > 0 ? '+' : ''}${d}%</span>`;
 }
 
+/** Build the strategy comparison table comparing single-prompt baseline vs wave analysis. */
+function buildStrategyComparison(b, l) {
+  if (!b || !l) return '';
+  const bRecall    = b.overallRecall    ?? (b.totalFalseNegatives != null ? Math.round(b.totalTruePositives / (b.totalTruePositives + b.totalFalseNegatives) * 100) : null);
+  const bPrecision = b.overallPrecision ?? (b.totalFalsePositives === 0 ? 100 : Math.round(b.totalTruePositives / (b.totalTruePositives + b.totalFalsePositives) * 100));
+  const bF1        = b.overallF1        ?? (bRecall != null && bPrecision != null && bRecall + bPrecision > 0 ? Math.round(2 * bRecall * bPrecision / (bRecall + bPrecision)) : null);
+  const lRecall    = l.overallRecall    ?? Math.round(l.totalTruePositives / (l.totalTruePositives + l.totalFalseNegatives) * 100);
+  const lPrecision = l.overallPrecision ?? (l.totalTruePositives + l.totalFalsePositives > 0 ? Math.round(l.totalTruePositives / (l.totalTruePositives + l.totalFalsePositives) * 100) : 100);
+  const lF1        = l.overallF1        ?? (lPrecision + lRecall > 0 ? Math.round(2 * lPrecision * lRecall / (lPrecision + lRecall)) : 0);
+  const fmt = (v, n, higherIsBetter = true) => {
+    if (v == null || n == null) return '<td>—</td>';
+    const d = n - v; const sign = d > 0 ? '+' : '';
+    const cls = d === 0 ? '' : (d > 0) === higherIsBetter ? 'style="color:#4ade80"' : 'style="color:#f87171"';
+    return `<td ${cls}>${sign}${d}%</td>`;
+  };
+  const rows = [
+    { label: 'Jaccard (IoU)',    bVal: b.overallRate, lVal: l.overallRate, higher: true },
+    { label: 'Recall (TP / TP+FN)', bVal: bRecall,   lVal: lRecall,       higher: true },
+    { label: 'Precision (TP / TP+FP)', bVal: bPrecision, lVal: lPrecision, higher: true },
+    { label: 'F1 Score',         bVal: bF1,           lVal: lF1,           higher: true },
+  ].map(r => `<tr><td>${r.label}</td><td>${r.bVal ?? '—'}%</td><td>${r.lVal ?? '—'}%</td>${fmt(r.bVal, r.lVal, r.higher)}</tr>`).join('');
+  return `<h2>Strategy Comparison — Single-Prompt (Baseline) vs Wave Analysis (Current)</h2>
+<table style="max-width:560px">
+<tr><th>Metric</th><th>Single-Prompt</th><th>Wave Analysis</th><th>Δ</th></tr>
+${rows}
+</table>
+<p class="note" style="margin-top:8px">Baseline = ${b.timestamp?.substring(0,10) ?? '—'} · Current = ${l.timestamp?.substring(0,10) ?? '—'} · Wave mode uses ${6} specialised LLM passes per file</p>`;
+}
+
 /** Generates a fully self-contained HTML dashboard. */
 function generateDashboardHTML(baseline, previous, latest) {
   // Enhancement roadmap — update status: 'done' | 'in-progress' | 'backlog'
@@ -898,6 +927,7 @@ function generateDashboardHTML(baseline, previous, latest) {
     { id: 'DI', title: 'Dead instruction detector',   detail: 'Instructions referencing removed features, schemes, or paths', status: 'done' },
     { id: 'OS', title: 'Over-specification warnings', detail: 'Trivial formatting micro-rules (exactly N spaces/chars) with no quality benefit', status: 'done' },
     { id: 'CD', title: 'Circular definition check',   detail: 'A defined using B, B defined using A (e.g. P0 = requires P0 response)', status: 'done' },
+    { id: 'SQ', title: 'Skill quality score',          detail: 'Composite A–F grade per analyzed skill: weighted issue density across all four pillars, surfaced inline with diagnostics', status: 'backlog' },
   ];
 
   const b = baseline;
@@ -1093,7 +1123,10 @@ function generateDashboardHTML(baseline, previous, latest) {
 ${planGoodRows ? `<p class="note" style="margin-top:8px">✅ ${l.files.filter(f=>f.rate>=75).length} skills already scoring ≥ 75% — maintain coverage.</p>` : ''}`;
 
   const [analyzerGrade, agBg, agFg] = gradeFor(l.overallRate);
-  const analyzerGradeCard = `<div class="card neutral" style="border-color:${agBg}20"><div class="lbl">Analyzer Grade</div><div class="val" style="color:${agBg};font-size:48px">${analyzerGrade}</div><div class="sub">${l.overallRate}% overall Jaccard</div></div>`;
+  const lRecall    = l.overallRecall    ?? Math.round(l.totalTruePositives / (l.totalTruePositives + l.totalFalseNegatives) * 100);
+  const lPrecision = l.overallPrecision ?? (l.totalTruePositives + l.totalFalsePositives > 0 ? Math.round(l.totalTruePositives / (l.totalTruePositives + l.totalFalsePositives) * 100) : 100);
+  const lF1        = l.overallF1        ?? (lPrecision + lRecall > 0 ? Math.round(2 * lPrecision * lRecall / (lPrecision + lRecall)) : 0);
+  const analyzerGradeCard = `<div class="card neutral" style="border-color:${agBg}20"><div class="lbl">Analyzer Grade</div><div class="val" style="color:${agBg};font-size:48px">${analyzerGrade}</div><div class="sub">${l.overallRate}% Jaccard &nbsp;·&nbsp; ${lRecall}% recall &nbsp;·&nbsp; ${lPrecision}% precision &nbsp;·&nbsp; F1&nbsp;${lF1}%</div></div>`;
   const impVsPrev = p ? (l.overallRate - p.overallRate) : null;
   const prevCard = p
     ? `<div class="card neutral"><div class="lbl">Previous Jaccard</div><div class="val">${p.overallRate}%</div><div class="sub">TP: ${p.totalTruePositives}  FP: ${p.totalFalsePositives} &nbsp;·&nbsp; ${p.timestamp.substring(0,10)}</div></div>`
@@ -1185,6 +1218,11 @@ ${headerNote}
 ${regressionBanner}
 <div class="cards">
   ${analyzerGradeCard}
+  <div class="card neutral"><div class="lbl">Recall</div><div class="val">${lRecall}%</div><div class="sub">TP ÷ (TP+FN) — detection sensitivity</div></div>
+  <div class="card neutral"><div class="lbl">Precision</div><div class="val">${lPrecision}%</div><div class="sub">TP ÷ (TP+FP) — signal-to-noise</div></div>
+  <div class="card neutral"><div class="lbl">F1 Score</div><div class="val">${lF1}%</div><div class="sub">2·P·R ÷ (P+R) — harmonic mean</div></div>
+</div>
+<div class="cards" style="margin-top:12px">
   <div class="card neutral"><div class="lbl">Baseline Jaccard</div><div class="val">${b.overallRate}%</div><div class="sub">TP: ${b.totalTruePositives}  FP: ${b.totalFalsePositives} &nbsp;·&nbsp; ${b.timestamp.substring(0,10)}</div></div>
   ${prevCard}
   <div class="card ${l.overallRate >= b.overallRate ? 'pos' : 'neg'}"><div class="lbl">Current Jaccard</div><div class="val">${l.overallRate}%</div><div class="sub">TP: ${l.totalTruePositives}  FP: ${l.totalFalsePositives} &nbsp;·&nbsp; ${l.timestamp.substring(0,10)}</div></div>
@@ -1194,6 +1232,8 @@ ${regressionBanner}
 
 <h2>Per-File Detection</h2>
 <table><tr><th>Skill file</th><th style="text-align:right">Injected</th>${fileHeaderBase}${fileHeaderPrev}<th>Current</th><th style="text-align:right">Detected</th>${fileHeaderDelta}</tr>${fileRows}</table>
+
+${buildStrategyComparison(b, l)}
 
 <h2>By Analyzer Category (detected counts)</h2>
 <table>${catHeader}${catRows}</table>
@@ -1478,7 +1518,7 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
     {
       name: 'Dead Instructions (12 injected)',
       path: path.join(__dirname, 'mock_skills_3', 'test-dead-instructions', 'SKILL.md'),
-      expected: 12, category: 'structural', group: 'HYGIENE',
+      expected: 12, category: 'dead_instruction', group: 'HYGIENE',
     },
     {
       name: 'Mixed Structural (13 injected)',
@@ -1541,11 +1581,10 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
     {
       name: 'Dead Instructions Hard (12 injected — plausible deprecated APIs)',
       path: path.join(__dirname, 'mock_skills_4', 'test-dead-hard', 'SKILL.md'),
-      expected: 12, category: 'structural', group: 'HARD',
+      expected: 12, category: 'dead_instruction', group: 'HARD',
       note: 'Syntactically valid but removed/renamed in specific tool versions',
     },
     {
-      name: 'Mixed Hard (16 injected — all 6 adversarial sub-types)',
       path: path.join(__dirname, 'mock_skills_4', 'test-mixed-hard', 'SKILL.md'),
       expected: 16, category: 'contradiction + ambiguity + obligation_strength + structural + coverage_gap', group: 'HARD',
       note: 'Hardest variant of each pattern type in a single coherent document',
@@ -1710,13 +1749,19 @@ ${results.map(r => `| ${r.name} | ${r.expected} | ${r.detected} | ${r.rate}% | $
   const overallJaccard = (totalTruePositives + totalFalsePositives + totalFalseNegatives) > 0
     ? totalTruePositives / (totalTruePositives + totalFalsePositives + totalFalseNegatives) : 0;
   const overallRate = Math.round(overallJaccard * 100);
+  const totalExpectedAll = totalTruePositives + totalFalseNegatives;  // = sum of test.expected
+  const totalReported    = totalTruePositives + totalFalsePositives;  // = TP + FP
+  const overallRecall    = totalExpectedAll > 0 ? Math.round(totalTruePositives / totalExpectedAll * 100) : 0;
+  const overallPrecision = totalReported > 0    ? Math.round(totalTruePositives / totalReported    * 100) : 0;
+  const prf1denom = overallPrecision + overallRecall;
+  const overallF1 = prf1denom > 0 ? Math.round(2 * overallPrecision * overallRecall / prf1denom) : 0;
 
   const statusColor = overallRate >= 60 ? 'green' : overallRate >= 40 ? 'yellow' : 'red';
   const status = overallRate >= 60 ? '✅ GOOD' : overallRate >= 40 ? '⚠️ PARTIAL — some categories underperforming' : '❌ NEEDS WORK';
 
   log('-'.repeat(70), 'gray');
   log(`TOTAL: TP ${totalTruePositives}  FP ${totalFalsePositives}  FN ${totalFalseNegatives}`, 'gray');
-  log(`SCORE: Jaccard: ${overallRate}%  TP: ${totalTruePositives}  FP: ${totalFalsePositives}  FN: ${totalFalseNegatives} ${status}`, statusColor);
+  log(`SCORE: Jaccard: ${overallRate}%  Recall: ${overallRecall}%  Precision: ${overallPrecision}%  F1: ${overallF1}%  ${status}`, statusColor);
   
   if (overallRate >= 55) {
     log('\n✅ Analyzer is performing well against known-detectable issue categories.', 'green');
@@ -1736,7 +1781,10 @@ ${results.map(r => `| ${r.name} | ${r.expected} | ${r.detected} | ${r.rate}% | $
       totalTruePositives,
       totalFalsePositives,
       totalFalseNegatives,
-      overallRate,  // = Jaccard score (0-100)
+      overallRate,       // = Jaccard score (0-100)
+      overallRecall,     // = TP / (TP + FN)
+      overallPrecision,  // = TP / (TP + FP)
+      overallF1,         // = 2*P*R / (P+R)
       files: results,
     };
     const { isBaseline } = saveBattleResults(record);

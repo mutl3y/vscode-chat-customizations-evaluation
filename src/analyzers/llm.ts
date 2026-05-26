@@ -39,6 +39,15 @@ For domain-inference contradictions (practical effects are mutually exclusive ev
 - Example of valid domain-inference contradiction: "Always minimize external dependencies" + "Always use well-established open-source libraries over custom code" — the two rules prescribe opposite actions (build custom vs. import established library) for the same decision point
 - Example of non-contradiction: "Minimise dependencies" + "Use the best tool for the job" — not operationally opposed, the second is context-dependent
 
+SYSTEMATIC CROSS-DOCUMENT SCAN — contradictions are frequently separated by 3 or more sections.
+After reading the full document, perform these dedicated passes:
+1. Numeric range conflicts — same threshold, limit, count, or percentage defined as different values in different sections
+2. Same-term-different-definition — same technical term has incompatible meanings or scopes in two sections
+3. Approval/authority conflicts — two sections name different people, roles, or processes as responsible for the same decision
+4. Enable/disable conflicts — same feature, behaviour, or policy is required in one section and forbidden or disabled in another
+5. Floor-vs-ceiling conflicts — two constraints that cannot both be satisfied simultaneously (e.g., "must be ≥60%" in one place and "must be ≤40%" in another)
+6. Scope overlap conflicts — an instruction that applies to "all X" directly contradicts a rule that carves out a specific X and assigns it opposite treatment
+
 Respond ONLY with JSON in this exact format (use [] for an empty array):
 {
   "contradictions": [
