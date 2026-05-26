@@ -67,7 +67,8 @@ Quality bar:
 - For criterion (a): only report when you are highly confident the ambiguity leads to materially different model behavior.
 - For criteria (b) and (c): ALWAYS flag these when present — they are structural problems that prevent reliable instruction following regardless of apparent severity. Do not apply a confidence filter to these patterns.
 - Do NOT flag numeric thresholds, size limits, or measurement targets (e.g. '<2 GB', 'at most 9') — intentional design choices.
-- Do NOT flag specification qualifiers (e.g. 'as defined in devcontainer.json') — these narrow scope and are not ambiguous.
+- Do NOT flag specification qualifiers that reference a concrete, accessible external source (e.g. 'as defined in devcontainer.json', 'per RFC 9110') — these narrow scope unambiguously.
+- DO flag terms that sound authoritative but have NO operational definition in the document itself, even if they carry legal or regulatory weight. Examples: 'timely', 'material breach', 'appropriate measures', 'relevant authorities', 'significant impact', 'reasonable steps' — a practitioner cannot act on these without guessing what threshold or actor is intended. The test is: could two reasonable practitioners interpret this differently and take opposite actions?
 
 Flag ambiguity where:
 (a) a model would take clearly different actions depending on interpretation, OR

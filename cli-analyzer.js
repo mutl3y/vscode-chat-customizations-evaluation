@@ -1585,6 +1585,7 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
       note: 'Syntactically valid but removed/renamed in specific tool versions',
     },
     {
+      name: 'Mixed Hard (16 injected — adversarial multi-type)',
       path: path.join(__dirname, 'mock_skills_4', 'test-mixed-hard', 'SKILL.md'),
       expected: 16, category: 'contradiction + ambiguity + obligation_strength + structural + coverage_gap', group: 'HARD',
       note: 'Hardest variant of each pattern type in a single coherent document',

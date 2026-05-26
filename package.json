@@ -4,6 +4,7 @@
   "publisher": "ms-vscode",
   "displayName": "Chat Customizations Evaluations",
   "description": "Extension for analyzing, validating, and improving AI prompts",
+  "type": "module",
   "main": "./client/out/extension.js",
   "icon": "icon.png",
   "categories": [
