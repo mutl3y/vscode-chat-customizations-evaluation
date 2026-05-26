@@ -1382,13 +1382,13 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
     {
       name: 'GitHub Actions Efficiency (integration)',
       path: path.join(__dirname, 'mock_skill', 'github-actions-efficiency', 'SKILL.md'),
-      expected: 7,
+      expected: 19,
       category: 'contradiction + ambiguity + coverage_gap',
     },
     {
       name: 'GitHub Codespaces Efficiency (integration)',
       path: path.join(__dirname, 'mock_skill', 'github-codespaces-efficiency', 'SKILL.md'),
-      expected: 7,
+      expected: 9,
       category: 'contradiction + ambiguity + coverage_gap',
     },
   ];
