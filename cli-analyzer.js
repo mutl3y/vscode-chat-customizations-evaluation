@@ -771,7 +771,7 @@ function classifyCode(code) {
   if (code === 'contradiction' || code === 'hygiene-circular-definition') return 'Contradictions';
   // Clarity pillar — ambiguous, weak-obligation, or unowned instructions
   if (code === 'ambiguity-llm' || code === 'persona-inconsistency' ||
-      code === 'hygiene-obligation-strength' || code === 'hygiene-missing-agent') return 'Clarity';
+      code === 'hygiene-obligation-strength') return 'Clarity';
   // Completeness pillar — missing coverage and dead/deprecated instructions
   if (code === 'coverage-gap' || code === 'limited-coverage' ||
       code === 'hygiene-dead-instruction') return 'Completeness';
@@ -1540,8 +1540,9 @@ async function runBattleTest({ integration = false, secondary = false, hygiene =
     {
       name: 'Responsibility Ambiguity (15 injected)',
       path: path.join(__dirname, 'mock_skills_3', 'test-responsibility-ambiguity', 'SKILL.md'),
-      expected: 15, category: 'ambiguity + structural', group: 'HYGIENE',
-      note: 'Passive voice → hygiene-missing-agent; undelegated judgment + undefined expert → ambiguity-llm',
+      expected: 15, category: 'ambiguity', group: 'HYGIENE',
+      note: 'All 15 detected as ambiguity-llm. hygiene-missing-agent reclassified to Structure pillar to prevent double-counting.',
+
     },
   ];
 

@@ -136,6 +136,10 @@ Find overly complex instruction patterns that are hard for a model to follow rel
 - Do NOT flag an issue simply because the same problem is also a contradiction — if two instructions directly oppose each other, that is a contradiction (handled separately). Only flag here if the STRUCTURAL FORM of an instruction (its logic, sequencing, or priority framing) is itself hard to parse, independent of whether it conflicts with something else. Specifically: two instructions that require opposite behaviors (e.g. "be concise" vs "be comprehensive", narrow scope vs broad scope) are contradictions — do NOT report them as priority-conflict here.
 - Do NOT flag constraint-overload based on instruction count alone. Only flag when there are COMPETING priority systems (two or more explicitly named/labeled frameworks) with no stated precedence — the sheer number of instructions is not a cognitive load problem.
 - Report each problematic pattern ONCE. Do not report the same logical complexity as both nested-conditions and priority-conflict.
+- Do NOT flag circular definitions or definition loops as cognitive load — those are detected separately by the circular-definition hygiene pass.
+- Do NOT flag missing or undefined expert/specialist language ('consult the appropriate expert', 'the relevant team') as delegated-decision cognitive load — those are detected separately as responsibility-ambiguity issues.
+- Do NOT flag weak obligation language ('where possible', 'try to', 'when feasible') as delegated-decision cognitive load — those are detected separately as obligation-strength ambiguity issues.
+- Do NOT flag dead/deprecated instruction ordering (an instruction appearing before a note that its resource is unavailable) as a sequencing cognitive load — those are detected separately as dead-instruction hygiene issues.
 
 Flag:
 (a) conditional nesting 3+ levels deep with no decision tree or table to simplify it,
@@ -658,13 +662,21 @@ export class LLMAnalyzer {
    * Step 1 — Same-code duplicate: if the same instruction is flagged twice
    *   under the same code type (same first 80 normalised chars), keep first only.
    *
-   * Step 2 — Cross-code subsumption: lower-priority code types
-   *   (persona-inconsistency, cognitive-priority-conflict, cognitive-constraint-overload)
-   *   are dropped when a contradiction finding already covers the same instruction
-   *   pair — detected by ≥2 shared 6-char word stems (words >5 chars) in the messages.
+   * Step 2 — Contradiction subsumption: cognitive-priority-conflict and
+   *   cognitive-constraint-overload are dropped when a contradiction finding
+   *   already covers the same instruction pair (≥4 shared 6-char word stems).
+   *
+   * Step 3 — Primary-wave subsumption: cognitive sub-types that duplicate a
+   *   hygiene or ambiguity finding on the same pattern are dropped. Prevents
+   *   the cognitive wave from re-reporting issues already flagged by the
+   *   hygiene/ambiguity waves (e.g. circular definitions → nested-conditions,
+   *   delegated-judgment → delegated-decision).
    */
   private runConsolidationPass(results: AnalysisResult[]): AnalysisResult[] {
-    const infraCodes = new Set(['llm-error', 'llm-parse-error', 'llm-disabled', 'llm-loop-detected', 'high-complexity', 'limited-coverage']);
+    // contradiction-related is an informational cross-reference pointer emitted
+    // for the second instruction in a contradiction pair (when both instructions
+    // are found on different lines). It is not a distinct issue — exclude from counts.
+    const infraCodes = new Set(['llm-error', 'llm-parse-error', 'llm-disabled', 'llm-loop-detected', 'high-complexity', 'limited-coverage', 'contradiction-related']);
     const infra = results.filter(r => infraCodes.has(r.code));
     let findings = results.filter(r => !infraCodes.has(r.code));
 
@@ -694,7 +706,7 @@ export class LLMAnalyzer {
     });
 
     // Step 2: drop lower-priority cross-wave duplicates subsumed by a contradiction.
-    const subsumable = new Set(['cognitive-constraint-overload']);
+    const subsumable = new Set(['cognitive-constraint-overload', 'cognitive-priority-conflict']);
     const contradictionStems = findings
       .filter(r => r.code === 'contradiction')
       .map(r => stemSet(r.message));
@@ -710,6 +722,31 @@ export class LLMAnalyzer {
         // +"contradiction"+"instruction" = 4+ shared stems for QUALITY-13).
         return !contradictionStems.some(cs => countShared(rStems, cs) >= 4);
       });
+    }
+
+    // Step 3: suppress cognitive sub-types that duplicate primary-wave findings.
+    // When a cognitive finding shares ≥4 word stems with a hygiene or ambiguity
+    // finding on the same pattern, the cognitive wave is re-flagging an already-
+    // reported issue — drop the duplicate. Threshold 4 is conservative enough to
+    // avoid false suppressions (genuine cognitive findings about different content
+    // share far fewer stems with a hygiene finding on a different instruction).
+    const cogSubsumptionRules: Array<{ cogCode: string; dominantCodes: string[]; threshold: number }> = [
+      { cogCode: 'cognitive-delegated-decision', dominantCodes: ['ambiguity-llm', 'hygiene-obligation-strength', 'hygiene-missing-agent'], threshold: 4 },
+      { cogCode: 'cognitive-nested-conditions',  dominantCodes: ['hygiene-circular-definition'],                                          threshold: 4 },
+      { cogCode: 'cognitive-sequencing',         dominantCodes: ['contradiction', 'hygiene-dead-instruction'],                           threshold: 4 },
+      { cogCode: 'cognitive-deep-decision-tree', dominantCodes: ['ambiguity-llm'],                                                       threshold: 4 },
+    ];
+    for (const { cogCode, dominantCodes, threshold } of cogSubsumptionRules) {
+      const dominantStems = findings
+        .filter(r => dominantCodes.includes(r.code))
+        .map(r => stemSet(r.message));
+      if (dominantStems.length > 0) {
+        findings = findings.filter(r => {
+          if (r.code !== cogCode) return true;
+          const rStems = stemSet(r.message);
+          return !dominantStems.some(ds => countShared(rStems, ds) >= threshold);
+        });
+      }
     }
 
     this.debugLog('Consolidation (deterministic) completed', {
